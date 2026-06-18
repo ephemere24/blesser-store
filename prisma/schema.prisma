@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AccessCode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  clientName String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  carts     Cart[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  price       Float
+  description String?
+  specs       String?
+  category    String?
+  images      String   @default("[]")
+  visible     Boolean  @default(true)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  flavors     Flavor[]
+  cartItems   CartItem[]
+}
+
+model Flavor {
+  id        Int     @id @default(autoincrement())
+  name      String
+  inStock   Boolean @default(true)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId Int
+}
+
+model Cart {
+  id           Int        @id @default(autoincrement())
+  accessCode   AccessCode @relation(fields: [accessCodeId], references: [id])
+  accessCodeId Int
+  items        CartItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([accessCodeId])
+}
+
+model CartItem {
+  id        Int     @id @default(autoincrement())
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cartId    Int
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  flavorId  Int?
+  quantity  Int     @default(1)
+
+  @@unique([cartId, productId, flavorId])
+}
