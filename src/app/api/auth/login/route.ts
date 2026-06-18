@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({ ok: true, clientName: accessCode.clientName })
   response.cookies.set('bs_token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7,
     path: '/',

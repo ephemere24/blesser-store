@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({ ok: true })
   response.cookies.set('bs_admin', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,
     sameSite: 'lax',
     maxAge: 60 * 60 * 8,
     path: '/',
