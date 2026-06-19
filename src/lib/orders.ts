@@ -138,3 +138,89 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
 export async function notifyOrderModified(orderId: number, clientLabel: string, action: string) {
   await sendMessage(`✏️ <b>Pedido #${orderId} modificado</b>\n\n👤 ${clientLabel}\n${action}`)
 }
+
+export type DesiredItem = { productId: number; flavorId: number | null; quantity: number }
+
+/**
+ * Guarda el estado COMPLETO de un pedido de una sola vez (reconcilia stock y total).
+ * Sustituye las líneas por las indicadas y ajusta el inventario según el cambio neto.
+ */
+export async function applyOrderSave(
+  orderId: number,
+  desired: DesiredItem[],
+  pickup?: { pickupDate: string; pickupTime: string }
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
+  if (!order) throw new OrderEditError('Pedido no encontrado', 404)
+  if (order.status === 'completed') throw new OrderEditError('El pedido ya está completado', 409)
+  if (order.status === 'cancelled') throw new OrderEditError('El pedido está cancelado', 409)
+
+  // Cantidades actuales por sabor
+  const curByFlavor = new Map<number, number>()
+  for (const it of order.items) {
+    if (it.flavorId) curByFlavor.set(it.flavorId, (curByFlavor.get(it.flavorId) || 0) + it.quantity)
+  }
+
+  // Fusionar líneas deseadas por producto+sabor
+  const mergedMap = new Map<string, DesiredItem>()
+  for (const d of desired) {
+    const q = Math.max(0, Math.floor(d.quantity))
+    if (q <= 0) continue
+    const key = `${d.productId}:${d.flavorId ?? 'null'}`
+    const ex = mergedMap.get(key)
+    if (ex) ex.quantity += q
+    else mergedMap.set(key, { productId: d.productId, flavorId: d.flavorId ?? null, quantity: q })
+  }
+  const mergedDesired = [...mergedMap.values()]
+
+  const desByFlavor = new Map<number, number>()
+  for (const d of mergedDesired) {
+    if (d.flavorId) desByFlavor.set(d.flavorId, (desByFlavor.get(d.flavorId) || 0) + d.quantity)
+  }
+
+  // Validar y preparar ajustes de stock (cambio neto por sabor)
+  const stockUpdates: { id: number; stock: number; inStock: boolean }[] = []
+  const flavorIds = new Set<number>([...curByFlavor.keys(), ...desByFlavor.keys()])
+  for (const fid of flavorIds) {
+    const flavor = await prisma.flavor.findUnique({ where: { id: fid } })
+    if (!flavor) continue
+    const delta = (desByFlavor.get(fid) || 0) - (curByFlavor.get(fid) || 0)
+    if (delta > 0 && flavor.stock < delta) {
+      throw new OrderEditError(`Sin stock suficiente de ${flavor.name}. Quedan ${flavor.stock} unidades.`, 409)
+    }
+    const newStock = Math.max(0, flavor.stock - delta)
+    stockUpdates.push({ id: fid, stock: newStock, inStock: newStock > 0 })
+  }
+
+  // Resolver nombres/precio de las líneas
+  const lineData: { orderId: number; productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }[] = []
+  for (const d of mergedDesired) {
+    const product = await prisma.product.findUnique({ where: { id: d.productId } })
+    if (!product) throw new OrderEditError('Producto no encontrado', 404)
+    let flavorName: string | null = null
+    if (d.flavorId) {
+      const f = await prisma.flavor.findUnique({ where: { id: d.flavorId } })
+      if (!f) throw new OrderEditError('Sabor no encontrado', 404)
+      flavorName = f.name
+    }
+    lineData.push({
+      orderId, productId: d.productId, flavorId: d.flavorId,
+      productName: product.name, flavorName, price: product.price, quantity: d.quantity,
+    })
+  }
+  const total = lineData.reduce((s, l) => s + l.price * l.quantity, 0)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.orderItem.deleteMany({ where: { orderId } })
+    if (lineData.length) await tx.orderItem.createMany({ data: lineData })
+    for (const su of stockUpdates) {
+      await tx.flavor.update({ where: { id: su.id }, data: { stock: su.stock, inStock: su.inStock } })
+    }
+    await tx.order.update({
+      where: { id: orderId },
+      data: { total, ...(pickup ? { pickupDate: pickup.pickupDate, pickupTime: pickup.pickupTime } : {}) },
+    })
+  })
+
+  return prisma.order.findUnique({ where: { id: orderId }, include: { items: true, accessCode: true } })
+}

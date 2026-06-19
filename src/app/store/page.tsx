@@ -3,14 +3,14 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar, X } from 'lucide-react'
+import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
 
 gsap.registerPlugin(ScrollTrigger)
 
-interface Flavor { id: number; name: string; inStock: boolean }
+interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
@@ -24,6 +24,7 @@ interface Order {
   id: number; total: number; status: string; note: string | null
   pickupDate: string | null; pickupTime: string | null; items: OrderItem[]
 }
+interface DraftItem { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
 
 export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -38,15 +39,33 @@ export default function StorePage() {
   const [orderDone, setOrderDone] = useState<number | null>(null)
   const [pickupDate, setPickupDate] = useState('')
   const [pickupTime, setPickupTime] = useState('')
+  // Borrador del pedido abierto
+  const [draftItems, setDraftItems] = useState<DraftItem[]>([])
+  const [draftDate, setDraftDate] = useState('')
+  const [draftTime, setDraftTime] = useState('')
+  const [dirty, setDirty] = useState(false)
   const [editPickup, setEditPickup] = useState(false)
+  const [saving, setSaving] = useState(false)
   const router = useRouter()
 
   const pickupDays = useMemo(() => getPickupDays(), [])
   const timeSlots = useMemo(() => pickupDate ? getTimeSlots(pickupDate) : [], [pickupDate])
+  const draftSlots = useMemo(() => draftDate ? getTimeSlots(draftDate) : [], [draftDate])
 
   const headerRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const cartPanelRef = useRef<HTMLDivElement>(null)
+
+  function initDraft(order: Order) {
+    setDraftItems(order.items.map(i => ({
+      productId: i.productId!, flavorId: i.flavorId, productName: i.productName,
+      flavorName: i.flavorName, price: i.price, quantity: i.quantity,
+    })))
+    setDraftDate(order.pickupDate || '')
+    setDraftTime(order.pickupTime || '')
+    setDirty(false)
+    setEditPickup(false)
+  }
 
   function loadAll() {
     return Promise.all([
@@ -58,11 +77,19 @@ export default function StorePage() {
       setCart(cartData)
       const pending = (orders || []).find((o: Order) => o.status === 'pending') || null
       setActiveOrder(pending)
+      if (pending) initDraft(pending)
       setLoading(false)
     })
   }
 
   useEffect(() => { loadAll() }, [router])
+
+  // Avisar al cerrar/recargar la pestaña con cambios sin guardar
+  useEffect(() => {
+    const h = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
 
   useEffect(() => {
     if (loading || !gridRef.current) return
@@ -84,31 +111,114 @@ export default function StorePage() {
     if (panelOpen) gsap.fromTo(cartPanelRef.current, { x: '100%' }, { x: '0%', duration: 0.4, ease: 'power3.out' })
   }, [panelOpen])
 
-  function closePanel() {
+  function doClosePanel() {
     if (!cartPanelRef.current) { setPanelOpen(false); return }
     gsap.to(cartPanelRef.current, { x: '100%', duration: 0.3, ease: 'power3.in', onComplete: () => setPanelOpen(false) })
   }
+  function closePanel() {
+    if (dirty) {
+      if (!confirm('Tienes cambios sin guardar. ¿Descartar los cambios?')) return
+      if (activeOrder) initDraft(activeOrder) // descartar
+    }
+    doClosePanel()
+  }
 
-  // Añadir producto: si hay pedido abierto, va directo al pedido; si no, al carrito.
+  function guardedNav(fn: () => void) {
+    if (dirty && !confirm('Tienes cambios sin guardar en tu pedido. ¿Salir sin guardar?')) return
+    fn()
+  }
+
+  function flavorStock(productId: number, flavorId: number | null): number | null {
+    if (!flavorId) return null
+    const p = products.find(p => p.id === productId)
+    return p?.flavors.find(f => f.id === flavorId)?.stock ?? 0
+  }
+
+  // Añadir producto al borrador (local) o al carrito (si no hay pedido abierto)
   async function addProduct(productId: number) {
     const flavorId = selectedFlavors[productId] ?? null
-    setAddingId(productId)
     if (activeOrder) {
-      const res = await fetch(`/api/orders/${activeOrder.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ op: 'addItem', productId, flavorId, quantity: 1 }),
+      const product = products.find(p => p.id === productId)
+      if (!product) return
+      const flavor = flavorId ? product.flavors.find(f => f.id === flavorId) : null
+      const existing = draftItems.find(i => i.productId === productId && i.flavorId === flavorId)
+      const newQty = (existing?.quantity ?? 0) + 1
+      if (flavor && newQty > flavor.stock) { alert(`Sin stock suficiente. Quedan ${flavor.stock} unidades.`); return }
+      setDraftItems(prev => {
+        if (existing) return prev.map(i => i === existing ? { ...i, quantity: newQty } : i)
+        return [...prev, { productId, flavorId, productName: product.name, flavorName: flavor?.name ?? null, price: product.price, quantity: 1 }]
       })
-      if (res.ok) { setActiveOrder(await res.json()); setPanelOpen(true) }
-      else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo añadir al pedido') }
-    } else {
-      const res = await fetch('/api/cart', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, flavorId }),
-      })
-      if (res.ok) setCart(await res.json())
-      else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo añadir al carrito') }
+      setDirty(true)
+      setPanelOpen(true)
+      return
     }
+    setAddingId(productId)
+    const res = await fetch('/api/cart', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId, flavorId }),
+    })
+    if (res.ok) setCart(await res.json())
+    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo añadir al carrito') }
     setAddingId(null)
+  }
+
+  // --- Borrador del pedido abierto (local) ---
+  function draftSetQty(item: DraftItem, newQty: number) {
+    const q = Math.max(0, newQty)
+    if (q > item.quantity) {
+      const stock = flavorStock(item.productId, item.flavorId)
+      if (stock !== null && q > stock) { alert(`Sin stock suficiente. Quedan ${stock} unidades.`); return }
+    }
+    setDraftItems(prev => prev.flatMap(i => i === item ? (q <= 0 ? [] : [{ ...i, quantity: q }]) : [i]))
+    setDirty(true)
+  }
+  function draftRemove(item: DraftItem) {
+    setDraftItems(prev => prev.filter(i => i !== item))
+    setDirty(true)
+  }
+  function chooseDraftTime(time: string) {
+    setDraftTime(time)
+    setDirty(true)
+    setEditPickup(false)
+  }
+
+  async function saveOrder() {
+    if (!activeOrder) return
+    if (draftItems.length === 0) { alert('El pedido no puede quedar vacío. Si no quieres nada, cancélalo.'); return }
+    if (!draftDate || !draftTime) { alert('Selecciona el día y la hora de recogida'); return }
+    setSaving(true)
+    const res = await fetch(`/api/orders/${activeOrder.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: draftItems.map(i => ({ productId: i.productId, flavorId: i.flavorId, quantity: i.quantity })),
+        pickupDate: draftDate, pickupTime: draftTime,
+      }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setActiveOrder(updated)
+      initDraft(updated)
+      // refrescar stock del catálogo
+      fetch('/api/products').then(r => r.ok ? r.json() : products).then(setProducts)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || 'No se pudo guardar el pedido')
+    }
+    setSaving(false)
+  }
+
+  async function orderCancel() {
+    if (!activeOrder) return
+    if (!confirm('¿Cancelar este pedido?')) return
+    const res = await fetch(`/api/orders/${activeOrder.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op: 'cancel' }),
+    })
+    if (res.ok) {
+      setActiveOrder(null); setDraftItems([]); setDirty(false); setEditPickup(false)
+      doClosePanel()
+      fetch('/api/products').then(r => r.ok ? r.json() : products).then(setProducts)
+    } else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo cancelar') }
   }
 
   // --- Carrito (antes del primer pedido) ---
@@ -138,7 +248,7 @@ export default function StorePage() {
       const data = await res.json()
       setCart({ items: [] })
       setNote(''); setPickupDate(''); setPickupTime('')
-      setActiveOrder(data.order)
+      setActiveOrder(data.order); initDraft(data.order)
       setOrderDone(data.orderId)
     } else {
       const err = await res.json().catch(() => ({}))
@@ -147,45 +257,18 @@ export default function StorePage() {
     setPlacing(false)
   }
 
-  // --- Pedido abierto (ya realizado) ---
-  async function orderEdit(body: object) {
-    if (!activeOrder) return
-    const res = await fetch(`/api/orders/${activeOrder.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (res.ok) setActiveOrder(await res.json())
-    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo modificar el pedido') }
-  }
-  async function orderCancel() {
-    if (!activeOrder) return
-    if (!confirm('¿Cancelar este pedido?')) return
-    const res = await fetch(`/api/orders/${activeOrder.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'cancel' }),
-    })
-    if (res.ok) { setActiveOrder(null); setEditPickup(false); closePanel() }
-    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo cancelar') }
-  }
-  function openPickupEditor() {
-    setPickupDate(activeOrder?.pickupDate || '')
-    setPickupTime(activeOrder?.pickupTime || '')
-    setEditPickup(true)
-  }
-  async function chooseOrderTime(time: string) {
-    await orderEdit({ op: 'setPickup', pickupDate, pickupTime: time })
-    setEditPickup(false)
-  }
-
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/')
+    guardedNav(async () => {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      router.push('/')
+    })
   }
 
   const cartCount = cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
   const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * i.product.price, 0) ?? 0
-  const orderCount = activeOrder?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
-  const badgeCount = activeOrder ? orderCount : cartCount
+  const draftCount = draftItems.reduce((s, i) => s + i.quantity, 0)
+  const draftTotal = draftItems.reduce((s, i) => s + i.quantity * i.price, 0)
+  const badgeCount = activeOrder ? draftCount : cartCount
 
   if (loading) {
     return (
@@ -210,12 +293,12 @@ export default function StorePage() {
           <span className="font-semibold text-sm tracking-wide" style={{ color: 'var(--accent2)' }}>Blesser Store</span>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/store/pedidos"
+          <button onClick={() => guardedNav(() => router.push('/store/pedidos'))}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
                 style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
             <Package size={16} />
             <span className="hidden sm:inline">Historial</span>
-          </Link>
+          </button>
           <button onClick={() => setPanelOpen(true)}
                   className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
@@ -223,7 +306,7 @@ export default function StorePage() {
             <span>{activeOrder ? 'Mi pedido' : 'Carrito'}</span>
             {badgeCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center"
-                    style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                    style={{ background: dirty ? '#f59e0b' : 'var(--accent2)', color: 'var(--bg)' }}>
                 {badgeCount}
               </span>
             )}
@@ -239,12 +322,12 @@ export default function StorePage() {
           <div className="mb-6 p-3 rounded-xl flex items-center justify-between gap-3"
                style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
             <span className="text-sm" style={{ color: '#f59e0b' }}>
-              Tienes un pedido abierto (#{activeOrder.id}). Lo que añadas se sumará a ese pedido.
+              Tienes un pedido abierto (#{activeOrder.id}).{dirty ? ' Tienes cambios sin guardar.' : ' Lo que añadas se sumará a ese pedido.'}
             </span>
             <button onClick={() => setPanelOpen(true)}
                     className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold cursor-pointer"
                     style={{ background: '#f59e0b', color: 'var(--bg)' }}>
-              Ver pedido
+              {dirty ? 'Revisar y guardar' : 'Ver pedido'}
             </button>
           </div>
         )}
@@ -337,8 +420,9 @@ export default function StorePage() {
           <div ref={cartPanelRef} className="w-full max-w-sm flex flex-col"
                style={{ background: 'var(--surface)', borderLeft: '1px solid var(--border)', transform: 'translateX(100%)' }}>
             <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--border)' }}>
-              <h3 className="font-bold" style={{ color: 'var(--accent2)' }}>
+              <h3 className="font-bold flex items-center gap-2" style={{ color: 'var(--accent2)' }}>
                 {activeOrder ? `Tu pedido #${activeOrder.id}` : 'Carrito'}
+                {dirty && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>sin guardar</span>}
               </h3>
               <button onClick={closePanel} className="cursor-pointer" style={{ color: 'var(--muted)' }}>✕</button>
             </div>
@@ -353,7 +437,7 @@ export default function StorePage() {
                   Pedido <span className="font-mono">#{orderDone}</span> recibido correctamente.
                 </p>
                 <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
-                  Puedes seguir añadiendo productos desde el catálogo o modificarlo aquí.
+                  Puedes seguir añadiendo productos desde el catálogo. Recuerda <b>guardar</b> los cambios.
                 </p>
                 <button onClick={() => setOrderDone(null)}
                         className="px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
@@ -362,35 +446,35 @@ export default function StorePage() {
                 </button>
               </div>
             ) : activeOrder ? (
-              /* ===== PEDIDO ABIERTO ===== */
+              /* ===== PEDIDO ABIERTO (borrador local) ===== */
               <>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {activeOrder.items.length === 0 ? (
+                  {draftItems.length === 0 ? (
                     <p className="text-center py-12 text-sm" style={{ color: 'var(--muted)' }}>
                       El pedido está vacío. Añade productos desde el catálogo.
                     </p>
-                  ) : activeOrder.items.map(item => (
-                    <div key={item.id} className="flex gap-3 p-3 rounded-xl"
+                  ) : draftItems.map((item, idx) => (
+                    <div key={idx} className="flex gap-3 p-3 rounded-xl"
                          style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{item.productName}</p>
                         {item.flavorName && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavorName}</p>}
                         <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.price).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
-                          <button onClick={() => orderEdit({ op: 'setQty', itemId: item.id, quantity: item.quantity - 1 })}
+                          <button onClick={() => draftSetQty(item, item.quantity - 1)}
                                   className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Minus size={14} />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
-                          <button onClick={() => orderEdit({ op: 'setQty', itemId: item.id, quantity: item.quantity + 1 })}
+                          <button onClick={() => draftSetQty(item, item.quantity + 1)}
                                   className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Plus size={14} />
                           </button>
                         </div>
                       </div>
-                      <button onClick={() => orderEdit({ op: 'removeItem', itemId: item.id })}
+                      <button onClick={() => draftRemove(item)}
                               className="self-start p-2 rounded-lg cursor-pointer" style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>
                         <Trash2 size={15} />
                       </button>
@@ -399,49 +483,50 @@ export default function StorePage() {
                 </div>
 
                 <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
-                  {/* Recogida editable */}
+                  {/* Recogida editable (borrador) */}
                   <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--accent2)' }}>
                         <Clock size={13} /> Recogida
                       </span>
                       {!editPickup && (
-                        <button onClick={openPickupEditor} className="text-xs cursor-pointer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+                        <button onClick={() => setEditPickup(true)} className="text-xs cursor-pointer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
                           Cambiar
                         </button>
                       )}
                     </div>
-
                     {!editPickup ? (
                       <p className="text-sm" style={{ color: 'var(--accent)' }}>
-                        {activeOrder.pickupDate
-                          ? `${formatDayLabel(new Date(activeOrder.pickupDate + 'T00:00:00'))} a las ${activeOrder.pickupTime}`
-                          : 'Sin definir'}
+                        {draftDate ? `${formatDayLabel(new Date(draftDate + 'T00:00:00'))} a las ${draftTime}` : 'Sin definir'}
                       </p>
                     ) : (
                       <div className="space-y-2">
                         <div className="flex gap-1.5 overflow-x-auto pb-1">
                           {pickupDays.map(d => (
-                            <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
+                            <button key={d.value} onClick={() => { setDraftDate(d.value); setDraftTime('') }}
                               className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer capitalize"
                               style={{
-                                background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
-                                color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
-                                border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                                background: draftDate === d.value ? 'var(--accent2)' : 'var(--surface)',
+                                color: draftDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                                border: `1px solid ${draftDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
                               }}>
                               {d.label}
                             </button>
                           ))}
                         </div>
-                        {pickupDate && (
-                          timeSlots.length === 0 ? (
+                        {draftDate && (
+                          draftSlots.length === 0 ? (
                             <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas ese día.</p>
                           ) : (
                             <div className="grid grid-cols-4 gap-1.5 max-h-28 overflow-y-auto">
-                              {timeSlots.map(t => (
-                                <button key={t} onClick={() => chooseOrderTime(t)}
+                              {draftSlots.map(t => (
+                                <button key={t} onClick={() => chooseDraftTime(t)}
                                   className="px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
-                                  style={{ background: 'var(--surface)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
+                                  style={{
+                                    background: draftTime === t ? 'var(--accent2)' : 'var(--surface)',
+                                    color: draftTime === t ? 'var(--bg)' : 'var(--accent)',
+                                    border: `1px solid ${draftTime === t ? 'var(--accent2)' : 'var(--border)'}`,
+                                  }}>
                                   {t}
                                 </button>
                               ))}
@@ -449,7 +534,7 @@ export default function StorePage() {
                           )
                         )}
                         <button onClick={() => setEditPickup(false)} className="text-xs cursor-pointer" style={{ color: 'var(--muted)' }}>
-                          Cancelar cambio
+                          Cerrar
                         </button>
                       </div>
                     )}
@@ -457,8 +542,14 @@ export default function StorePage() {
 
                   <div className="flex justify-between items-center">
                     <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
-                    <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{activeOrder.total.toFixed(2)} €</span>
+                    <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{draftTotal.toFixed(2)} €</span>
                   </div>
+
+                  <button onClick={saveOrder} disabled={!dirty || saving}
+                          className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 cursor-pointer"
+                          style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                    {saving ? 'Guardando...' : dirty ? 'Guardar cambios' : 'Sin cambios'}
+                  </button>
                   <button onClick={orderCancel}
                           className="w-full py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
                           style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
