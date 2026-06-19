@@ -33,6 +33,7 @@ export default function StorePage() {
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [addingId, setAddingId] = useState<number | null>(null)
+  const [justAddedId, setJustAddedId] = useState<number | null>(null)
   const [selectedFlavors, setSelectedFlavors] = useState<Record<number, number | null>>({})
   const [note, setNote] = useState('')
   const [placing, setPlacing] = useState(false)
@@ -116,10 +117,9 @@ export default function StorePage() {
     gsap.to(cartPanelRef.current, { x: '100%', duration: 0.3, ease: 'power3.in', onComplete: () => setPanelOpen(false) })
   }
   function closePanel() {
-    if (dirty) {
-      if (!confirm('Tienes cambios sin guardar. ¿Descartar los cambios?')) return
-      if (activeOrder) initDraft(activeOrder) // descartar
-    }
+    // Cerrar el panel NO descarta nada: el borrador se mantiene mientras navegas
+    // por el catálogo. El aviso de "sin guardar" solo salta al salir de verdad
+    // (cerrar sesión, ir al historial o cerrar la pestaña).
     doClosePanel()
   }
 
@@ -149,7 +149,8 @@ export default function StorePage() {
         return [...prev, { productId, flavorId, productName: product.name, flavorName: flavor?.name ?? null, price: product.price, quantity: 1 }]
       })
       setDirty(true)
-      setPanelOpen(true)
+      setJustAddedId(productId)
+      setTimeout(() => setJustAddedId(c => c === productId ? null : c), 1000)
       return
     }
     setAddingId(productId)
@@ -402,7 +403,8 @@ export default function StorePage() {
                       disabled={addingId === product.id || inStockFlavors.length === 0}
                       className="mt-auto w-full py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 cursor-pointer"
                       style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                      {addingId === product.id ? 'Añadiendo...'
+                      {justAddedId === product.id ? '✓ Añadido'
+                        : addingId === product.id ? 'Añadiendo...'
                         : inStockFlavors.length === 0 ? 'Sin stock'
                         : activeOrder ? 'Añadir a mi pedido' : 'Añadir al carrito'}
                     </button>
