@@ -34,20 +34,19 @@ export function getPickupDays(now: Date = new Date()): { value: string; label: s
   return days
 }
 
-// Franjas horarias de un día. Para hoy, solo se muestran las futuras (con 30 min de margen).
+// Franjas horarias de un día, desde 14:00 hasta 21:00 inclusive.
+// Para hoy, solo se muestran las franjas que aún no han pasado.
 export function getTimeSlots(dateValue: string, now: Date = new Date()): string[] {
   const slots: string[] = []
   const isToday = dateValue === dateToValue(now)
-  const minMinutes = isToday
-    ? (now.getHours() * 60 + now.getMinutes() + 30)
-    : -1
+  const minMinutes = isToday ? (now.getHours() * 60 + now.getMinutes()) : -1
 
-  for (let h = PICKUP_START_HOUR; h < PICKUP_END_HOUR; h++) {
-    for (let m = 0; m < 60; m += SLOT_MINUTES) {
-      const total = h * 60 + m
-      if (total > minMinutes) {
-        slots.push(`${pad(h)}:${pad(m)}`)
-      }
+  const startTotal = PICKUP_START_HOUR * 60
+  const endTotal = PICKUP_END_HOUR * 60 // 21:00 inclusive
+
+  for (let total = startTotal; total <= endTotal; total += SLOT_MINUTES) {
+    if (total > minMinutes) {
+      slots.push(`${pad(Math.floor(total / 60))}:${pad(total % 60)}`)
     }
   }
   return slots
