@@ -10,7 +10,7 @@ interface Product {
   specs: string; category: string; visible: boolean; position: number
   images: string; flavors: Flavor[]
 }
-interface AccessCode { id: number; code: string; clientName: string | null; active: boolean }
+interface AccessCode { id: number; code: string; clientName: string | null; phone?: string | null; active: boolean }
 
 const emptyProduct = {
   name: '', price: 0, description: '', specs: '', category: '',
@@ -432,7 +432,7 @@ export default function AdminPage() {
                     {c.code}
                   </code>
                   <span className="text-xs flex-1" style={{ color: 'var(--muted)' }}>
-                    {c.clientName || '—'}
+                    {c.clientName || '—'}{c.phone ? ` · ${c.phone}` : ''}
                   </span>
                   <span className="text-xs px-2 py-1 rounded-lg"
                         style={{ background: c.active ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',

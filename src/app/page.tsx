@@ -8,6 +8,12 @@ export default function LoginPage() {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showRequest, setShowRequest] = useState(false)
+  const [reqName, setReqName] = useState('')
+  const [reqPhone, setReqPhone] = useState('')
+  const [reqLoading, setReqLoading] = useState(false)
+  const [reqError, setReqError] = useState('')
+  const [reqDone, setReqDone] = useState(false)
   const router = useRouter()
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -31,6 +37,24 @@ export default function LoginPage() {
     }, containerRef)
     return () => ctx.revert()
   }, [])
+
+  async function handleRequest(e: React.FormEvent) {
+    e.preventDefault()
+    setReqLoading(true)
+    setReqError('')
+    const res = await fetch('/api/access-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: reqName, phone: reqPhone }),
+    })
+    if (res.ok) {
+      setReqDone(true)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setReqError(data.error || 'No se pudo enviar la solicitud')
+    }
+    setReqLoading(false)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -107,10 +131,80 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <button
+          onClick={() => { setShowRequest(true); setReqDone(false); setReqError('') }}
+          className="w-full text-center text-sm mt-4 cursor-pointer transition-opacity hover:opacity-80"
+          style={{ color: 'var(--muted)', textDecoration: 'underline' }}
+        >
+          ¿No tienes código? Solicita acceso
+        </button>
+
         <p ref={footerRef} className="text-center text-xs mt-8" style={{ color: 'var(--muted)' }}>
           Venta exclusiva para mayores de 18 años
         </p>
       </div>
+
+      {/* Modal de solicitud de acceso */}
+      {showRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+             style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+             onClick={() => setShowRequest(false)}>
+          <div className="w-full max-w-sm rounded-2xl p-6"
+               style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+               onClick={e => e.stopPropagation()}>
+            {reqDone ? (
+              <div className="text-center py-4">
+                <div className="text-4xl mb-3">✅</div>
+                <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--accent2)' }}>Solicitud enviada</h3>
+                <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
+                  Hemos recibido tu solicitud. Nos pondremos en contacto contigo para darte tu código de acceso.
+                </p>
+                <button onClick={() => setShowRequest(false)}
+                        className="w-full py-3 rounded-xl font-semibold text-sm cursor-pointer"
+                        style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                  Entendido
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold mb-1" style={{ color: 'var(--accent2)' }}>Solicitar acceso</h3>
+                <p className="text-sm mb-5" style={{ color: 'var(--muted)' }}>
+                  Déjanos tus datos y te contactaremos con tu código.
+                </p>
+                <form onSubmit={handleRequest} className="space-y-3">
+                  <input
+                    type="text" value={reqName} onChange={e => setReqName(e.target.value)}
+                    placeholder="Tu nombre" autoFocus
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+                  <input
+                    type="tel" value={reqPhone} onChange={e => setReqPhone(e.target.value)}
+                    placeholder="Tu teléfono"
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+
+                  {reqError && (
+                    <p className="text-center text-sm" style={{ color: 'var(--danger)' }}>{reqError}</p>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setShowRequest(false)}
+                            className="flex-1 py-3 rounded-xl text-sm cursor-pointer"
+                            style={{ background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+                      Cancelar
+                    </button>
+                    <button type="submit" disabled={reqLoading || !reqName.trim() || !reqPhone.trim()}
+                            className="flex-1 py-3 rounded-xl font-semibold text-sm cursor-pointer disabled:opacity-40"
+                            style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                      {reqLoading ? 'Enviando...' : 'Enviar'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
