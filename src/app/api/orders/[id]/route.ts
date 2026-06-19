@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { applyOrderEdit, notifyOrderModified, OrderEditError, EditOp } from '@/lib/orders'
+import { isValidPickup } from '@/lib/pickup'
 
 const ACTION_LABELS: Record<string, string> = {
   setQty: 'Cambió una cantidad',
   removeItem: 'Eliminó una línea',
   addItem: 'Añadió un producto',
   cancel: '❌ Canceló el pedido',
+  setPickup: '📅 Cambió el día/hora de recogida',
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,9 +28,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const edit = (await req.json()) as EditOp
 
-  // Los clientes no editan nota/recogida desde aquí (solo contenido y cancelar)
-  if (edit.op === 'setNote' || edit.op === 'setPickup') {
+  // Los clientes no editan la nota desde aquí
+  if (edit.op === 'setNote') {
     return NextResponse.json({ error: 'Operación no permitida' }, { status: 403 })
+  }
+  // Si cambian la recogida, validamos día y hora
+  if (edit.op === 'setPickup') {
+    if (!isValidPickup(edit.pickupDate, edit.pickupTime)) {
+      return NextResponse.json({ error: 'El día u hora de recogida no son válidos' }, { status: 400 })
+    }
   }
 
   try {

@@ -3,64 +3,32 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Plus, Minus, X } from 'lucide-react'
+import { ArrowLeft, Package } from 'lucide-react'
 
-interface OrderItem { id: number; productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
+interface OrderItem { id: number; productName: string; flavorName: string | null; price: number; quantity: number }
 interface Order {
   id: number; total: number; status: string; note: string | null; createdAt: string
   pickupDate: string | null; pickupTime: string | null; items: OrderItem[]
 }
-interface PFlavor { id: number; name: string; stock: number; inStock: boolean }
-interface PProduct { id: number; name: string; price: number; flavors: PFlavor[] }
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pendiente', completed: 'Completado', cancelled: 'Cancelado',
-}
-const STATUS_COLORS: Record<string, string> = {
-  pending: '#f59e0b', completed: '#22c55e', cancelled: '#ef4444',
-}
+const STATUS_LABELS: Record<string, string> = { completed: 'Completado', cancelled: 'Cancelado' }
+const STATUS_COLORS: Record<string, string> = { completed: '#22c55e', cancelled: '#ef4444' }
 
-export default function MyOrdersPage() {
+export default function MyOrdersHistoryPage() {
   const [orders, setOrders] = useState<Order[]>([])
-  const [products, setProducts] = useState<PProduct[]>([])
   const [loading, setLoading] = useState(true)
-  const [addPicker, setAddPicker] = useState<{ orderId: number; productId: number | null; flavorId: number | null } | null>(null)
   const router = useRouter()
 
-  async function load() {
-    const res = await fetch('/api/orders')
-    if (res.status === 401) { router.push('/'); return }
-    setOrders(await res.json())
-    setLoading(false)
-  }
-
   useEffect(() => {
-    load()
-    fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts)
-  }, [])
-
-  function replaceOrder(updated: Order) {
-    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o))
-  }
-
-  async function editOrder(orderId: number, body: object) {
-    const res = await fetch(`/api/orders/${orderId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    fetch('/api/orders').then(r => {
+      if (r.status === 401) { router.push('/'); return [] }
+      return r.json()
+    }).then((data: Order[]) => {
+      // Solo pedidos cerrados (el pedido abierto se gestiona en la tienda)
+      setOrders((data || []).filter(o => o.status !== 'pending'))
+      setLoading(false)
     })
-    if (res.ok) replaceOrder(await res.json())
-    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo modificar el pedido') }
-  }
-
-  function confirmAdd() {
-    if (!addPicker || !addPicker.productId) return
-    const prod = products.find(p => p.id === addPicker.productId)
-    const needsFlavor = (prod?.flavors.length ?? 0) > 0
-    if (needsFlavor && !addPicker.flavorId) { alert('Elige un sabor'); return }
-    editOrder(addPicker.orderId, { op: 'addItem', productId: addPicker.productId, flavorId: addPicker.flavorId, quantity: 1 })
-    setAddPicker(null)
-  }
+  }, [router])
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -70,7 +38,7 @@ export default function MyOrdersPage() {
               style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
           <ArrowLeft size={16} />
         </Link>
-        <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>Mis pedidos</span>
+        <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>Historial de pedidos</span>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -79,16 +47,14 @@ export default function MyOrdersPage() {
         ) : orders.length === 0 ? (
           <div className="text-center py-20">
             <Package size={40} className="mx-auto mb-3" style={{ color: 'var(--muted)' }} />
-            <p style={{ color: 'var(--muted)' }}>Todavía no has hecho ningún pedido</p>
+            <p style={{ color: 'var(--muted)' }}>Aún no tienes pedidos en tu historial</p>
             <Link href="/store" className="inline-block mt-4 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
                   style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
               Ir al catálogo
             </Link>
           </div>
         ) : (
-          orders.map(order => {
-            const editable = order.status === 'pending'
-            return (
+          orders.map(order => (
             <div key={order.id} className="rounded-2xl p-4"
                  style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <div className="flex items-center justify-between mb-2">
@@ -110,96 +76,20 @@ export default function MyOrdersPage() {
                 </p>
               )}
 
-              <div className="space-y-1.5 mb-3">
+              <div className="space-y-1 mb-3">
                 {order.items.map(item => (
-                  <div key={item.id} className="flex items-center justify-between gap-2 text-sm" style={{ color: 'var(--accent)' }}>
-                    <span className="flex-1 min-w-0 truncate">{item.productName}{item.flavorName ? ` — ${item.flavorName}` : ''}</span>
-                    {editable ? (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => editOrder(order.id, { op: 'setQty', itemId: item.id, quantity: item.quantity - 1 })}
-                                className="w-6 h-6 rounded-md flex items-center justify-center cursor-pointer"
-                                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                          <Minus size={12} />
-                        </button>
-                        <span className="w-5 text-center font-semibold" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
-                        <button onClick={() => editOrder(order.id, { op: 'setQty', itemId: item.id, quantity: item.quantity + 1 })}
-                                className="w-6 h-6 rounded-md flex items-center justify-center cursor-pointer"
-                                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                          <Plus size={12} />
-                        </button>
-                        <span className="w-16 text-right" style={{ color: 'var(--muted)' }}>{(item.price * item.quantity).toFixed(2)} €</span>
-                        <button onClick={() => editOrder(order.id, { op: 'removeItem', itemId: item.id })}
-                                className="p-1 rounded-md cursor-pointer" style={{ color: 'var(--danger)' }}>
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ) : (
-                      <span style={{ color: 'var(--muted)' }}>{item.quantity}x · {(item.price * item.quantity).toFixed(2)} €</span>
-                    )}
+                  <div key={item.id} className="flex justify-between text-sm" style={{ color: 'var(--accent)' }}>
+                    <span>{item.quantity}x {item.productName}{item.flavorName ? ` — ${item.flavorName}` : ''}</span>
+                    <span style={{ color: 'var(--muted)' }}>{(item.price * item.quantity).toFixed(2)} €</span>
                   </div>
                 ))}
               </div>
 
-              {editable && (
-                addPicker?.orderId === order.id ? (
-                  <div className="mb-3 p-3 rounded-xl space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                    <select value={addPicker.productId ?? ''}
-                      onChange={e => setAddPicker({ orderId: order.id, productId: Number(e.target.value) || null, flavorId: null })}
-                      className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                      <option value="">Elige producto...</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    {(() => {
-                      const prod = products.find(p => p.id === addPicker.productId)
-                      if (!prod || prod.flavors.length === 0) return null
-                      return (
-                        <select value={addPicker.flavorId ?? ''}
-                          onChange={e => setAddPicker({ ...addPicker, flavorId: Number(e.target.value) || null })}
-                          className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                          <option value="">Elige sabor...</option>
-                          {prod.flavors.filter(f => f.stock > 0).map(f => (
-                            <option key={f.id} value={f.id}>{f.name} ({f.stock})</option>
-                          ))}
-                        </select>
-                      )
-                    })()}
-                    <div className="flex gap-2">
-                      <button onClick={() => setAddPicker(null)}
-                              className="flex-1 py-2 rounded-lg text-sm cursor-pointer"
-                              style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-                        Cancelar
-                      </button>
-                      <button onClick={confirmAdd}
-                              className="flex-1 py-2 rounded-lg text-sm font-semibold cursor-pointer"
-                              style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                        Añadir
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button onClick={() => setAddPicker({ orderId: order.id, productId: null, flavorId: null })}
-                          className="mb-3 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium"
-                          style={{ background: 'var(--surface2)', color: 'var(--accent2)', border: '1px solid var(--border)' }}>
-                    <Plus size={13} /> Añadir producto
-                  </button>
-                )
-              )}
-
               <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                 <span className="font-bold" style={{ color: 'var(--accent2)' }}>{order.total.toFixed(2)} €</span>
-                {editable && (
-                  <button onClick={() => { if (confirm('¿Cancelar este pedido?')) editOrder(order.id, { op: 'cancel' }) }}
-                          className="text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium"
-                          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
-                    Cancelar pedido
-                  </button>
-                )}
               </div>
             </div>
-            )
-          })
+          ))
         )}
       </main>
     </div>

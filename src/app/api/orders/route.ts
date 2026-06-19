@@ -131,5 +131,5 @@ export async function POST(req: NextRequest) {
 
   await notifyTelegram(message)
 
-  return NextResponse.json({ ok: true, orderId: order.id })
+  return NextResponse.json({ ok: true, orderId: order.id, order })
 }
