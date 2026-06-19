@@ -32,6 +32,14 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const { id } = await req.json()
-  await prisma.accessCode.delete({ where: { id } })
+
+  // Eliminar primero los datos dependientes (carrito y pedidos) para evitar
+  // que la clave foránea bloquee el borrado del código.
+  await prisma.$transaction([
+    prisma.cart.deleteMany({ where: { accessCodeId: id } }),
+    prisma.order.deleteMany({ where: { accessCodeId: id } }),
+    prisma.accessCode.delete({ where: { id } }),
+  ])
+
   return NextResponse.json({ ok: true })
 }

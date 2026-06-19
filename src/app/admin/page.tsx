@@ -244,10 +244,15 @@ export default function AdminPage() {
 
   async function deleteCode(id: number) {
     if (!confirm('¿Eliminar este código?')) return
-    await fetch('/api/admin/codes', {
+    const res = await fetch('/api/admin/codes', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(`No se pudo eliminar el código: ${err.error || res.status}`)
+      return
+    }
     await loadCodes()
   }
 

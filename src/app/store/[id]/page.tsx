@@ -132,7 +132,7 @@ export default function ProductPage() {
     if (res.ok) {
       setAdded(true)
       if (btnRef.current) gsap.fromTo(btnRef.current, { scale: 1.05 }, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' })
-      setTimeout(() => setAdded(false), 2000)
+      setTimeout(() => setAdded(false), 900)
     }
     setAdding(false)
   }
