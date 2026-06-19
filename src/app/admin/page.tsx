@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, ClipboardList } from 'lucide-react'
 
-interface Flavor { id?: number; name: string; inStock: boolean }
+interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; visible: boolean; position: number
@@ -260,17 +260,18 @@ export default function AdminPage() {
     if (!flavorInput.trim()) return
     setModal(m => ({
       ...m,
-      product: { ...m.product, flavors: [...m.product.flavors, { name: flavorInput.trim(), inStock: true }] }
+      product: { ...m.product, flavors: [...m.product.flavors, { name: flavorInput.trim(), inStock: true, stock: 0 }] }
     }))
     setFlavorInput('')
   }
 
-  function toggleFlavorStock(idx: number) {
+  function setFlavorStock(idx: number, stock: number) {
+    const safe = Math.max(0, Math.floor(stock || 0))
     setModal(m => ({
       ...m,
       product: {
         ...m.product,
-        flavors: m.product.flavors.map((f, i) => i === idx ? { ...f, inStock: !f.inStock } : f)
+        flavors: m.product.flavors.map((f, i) => i === idx ? { ...f, stock: safe, inStock: safe > 0 } : f)
       }
     }))
   }
@@ -524,12 +525,19 @@ export default function AdminPage() {
                   <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl"
                        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                     <span className="flex-1 text-sm" style={{ color: 'var(--accent2)' }}>{f.name}</span>
-                    <button onClick={() => toggleFlavorStock(i)}
-                      className="text-xs px-2 py-0.5 rounded-lg cursor-pointer"
-                      style={{ background: f.inStock ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                               color: f.inStock ? 'var(--success)' : 'var(--danger)' }}>
-                      {f.inStock ? 'En stock' : 'Agotado'}
-                    </button>
+                    <span className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                          style={{ background: f.stock > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                   color: f.stock > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      {f.stock > 0 ? 'En stock' : 'Agotado'}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>uds</span>
+                      <input
+                        type="number" min={0} value={f.stock}
+                        onChange={e => setFlavorStock(i, Number(e.target.value))}
+                        className="w-16 px-2 py-1 rounded-lg text-sm text-center outline-none"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+                    </div>
                     <button onClick={() => removeFlavor(i)} style={{ color: 'var(--danger)' }} className="cursor-pointer">
                       <Trash2 size={12} />
                     </button>

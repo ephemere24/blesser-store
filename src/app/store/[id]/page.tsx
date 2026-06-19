@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { gsap } from 'gsap'
 
-interface Flavor { id: number; name: string; inStock: boolean }
+interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
@@ -133,6 +133,9 @@ export default function ProductPage() {
       setAdded(true)
       if (btnRef.current) gsap.fromTo(btnRef.current, { scale: 1.05 }, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' })
       setTimeout(() => setAdded(false), 900)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || 'No se pudo añadir al carrito')
     }
     setAdding(false)
   }
@@ -198,6 +201,9 @@ export default function ProductPage() {
                       border: `1px solid ${selectedFlavor === f.id ? 'var(--accent2)' : 'var(--border)'}`,
                     }}>
                     <CheckCircle size={12} />{f.name}
+                    {f.stock <= 5 && (
+                      <span className="text-xs opacity-70">· quedan {f.stock}</span>
+                    )}
                   </button>
                 ))}
                 {outOfStockFlavors.map(f => (

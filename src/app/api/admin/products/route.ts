@@ -23,10 +23,15 @@ export async function POST(req: NextRequest) {
   const data = await req.json()
   const { flavors, ...productData } = data
 
+  const cleanFlavors = flavors?.map(({ name, stock }: { name: string; stock?: number }) => {
+    const units = Math.max(0, Math.floor(Number(stock) || 0))
+    return { name, stock: units, inStock: units > 0 }
+  })
+
   const product = await prisma.product.create({
     data: {
       ...productData,
-      flavors: flavors ? { create: flavors } : undefined,
+      flavors: cleanFlavors ? { create: cleanFlavors } : undefined,
     },
     include: { flavors: true },
   })

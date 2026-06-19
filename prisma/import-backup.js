@@ -32,7 +32,7 @@ async function main() {
         visible: p.visible,
         position: p.position,
         flavors: {
-          create: (p.flavors || []).map(f => ({ name: f.name, inStock: f.inStock })),
+          create: (p.flavors || []).map(f => ({ name: f.name, inStock: f.inStock, stock: f.stock ?? 0 })),
         },
       },
     })

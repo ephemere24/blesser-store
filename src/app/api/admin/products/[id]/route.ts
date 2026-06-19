@@ -16,8 +16,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { flavors, id: _id, createdAt, updatedAt, ...productData } = data
 
-  // Los sabores pueden venir con id/productId de la BD — los limpiamos
-  const cleanFlavors = flavors?.map(({ name, inStock }: { name: string; inStock: boolean }) => ({ name, inStock }))
+  // Los sabores pueden venir con id/productId de la BD — los limpiamos.
+  // La disponibilidad (inStock) se deriva del stock.
+  const cleanFlavors = flavors?.map(({ name, stock }: { name: string; stock?: number }) => {
+    const units = Math.max(0, Math.floor(Number(stock) || 0))
+    return { name, stock: units, inStock: units > 0 }
+  })
 
   const product = await prisma.product.update({
     where: { id: Number(id) },

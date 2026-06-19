@@ -106,6 +106,7 @@ export default function StorePage() {
       body: JSON.stringify({ productId, flavorId }),
     })
     if (res.ok) setCart(await res.json())
+    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo añadir al carrito') }
     setAddingId(null)
   }
 
@@ -116,6 +117,7 @@ export default function StorePage() {
       body: JSON.stringify({ itemId, quantity }),
     })
     if (res.ok) setCart(await res.json())
+    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo actualizar la cantidad') }
   }
 
   async function removeFromCart(itemId: number) {

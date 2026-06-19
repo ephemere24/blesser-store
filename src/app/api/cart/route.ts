@@ -42,6 +42,18 @@ export async function POST(req: NextRequest) {
     where: { cartId_productId_flavorId: { cartId: cart.id, productId, flavorId: flavorId ?? null } },
   })
 
+  // Validar stock disponible del sabor (si se ha seleccionado uno)
+  if (flavorId) {
+    const flavor = await prisma.flavor.findUnique({ where: { id: flavorId } })
+    const wanted = (existing?.quantity ?? 0) + quantity
+    if (!flavor || flavor.stock < wanted) {
+      return NextResponse.json(
+        { error: `Sin stock suficiente. Quedan ${flavor?.stock ?? 0} unidades.` },
+        { status: 409 }
+      )
+    }
+  }
+
   if (existing) {
     await prisma.cartItem.update({
       where: { id: existing.id },
@@ -70,6 +82,16 @@ export async function PATCH(req: NextRequest) {
   if (quantity <= 0) {
     await prisma.cartItem.delete({ where: { id: itemId, cartId: cart.id } })
   } else {
+    const item = await prisma.cartItem.findUnique({ where: { id: itemId } })
+    if (item?.flavorId) {
+      const flavor = await prisma.flavor.findUnique({ where: { id: item.flavorId } })
+      if (!flavor || flavor.stock < quantity) {
+        return NextResponse.json(
+          { error: `Sin stock suficiente. Quedan ${flavor?.stock ?? 0} unidades.` },
+          { status: 409 }
+        )
+      }
+    }
     await prisma.cartItem.update({
       where: { id: itemId, cartId: cart.id },
       data: { quantity },
