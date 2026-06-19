@@ -31,10 +31,17 @@ function ImageManager({ images, onChange }: { images: string[]; onChange: (imgs:
     for (const file of Array.from(files)) {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd })
-      if (res.ok) {
-        const { url } = await res.json()
-        urls.push(url)
+      try {
+        const res = await fetch('/api/admin/upload', { method: 'POST', body: fd })
+        if (res.ok) {
+          const { url } = await res.json()
+          urls.push(url)
+        } else {
+          const err = await res.json().catch(() => ({}))
+          alert(`Error subiendo ${file.name}: ${err.error || res.status}`)
+        }
+      } catch (e) {
+        alert(`Error de red subiendo ${file.name}: ${e}`)
       }
     }
     onChange([...images, ...urls])
