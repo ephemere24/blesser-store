@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, ClipboardList } from 'lucide-react'
 
 interface Flavor { id?: number; name: string; inStock: boolean }
 interface Product {
@@ -317,10 +317,16 @@ export default function AdminPage() {
           </div>
           <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>Admin Panel</span>
         </div>
-        <button onClick={logout} className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl"
-                style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
-          <LogOut size={14} /> Salir
-        </button>
+        <div className="flex items-center gap-2">
+          <a href="/admin/pedidos" className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl"
+             style={{ color: 'var(--accent2)', background: 'var(--surface2)' }}>
+            <ClipboardList size={14} /> Pedidos
+          </a>
+          <button onClick={logout} className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl"
+                  style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
+            <LogOut size={14} /> Salir
+          </button>
+        </div>
       </header>
 
       {/* Tabs */}

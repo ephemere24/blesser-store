@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, LogOut, Package } from 'lucide-react'
+import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2 } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
@@ -15,7 +15,7 @@ interface Product {
   specs: string; category: string; images: string; flavors: Flavor[]
 }
 interface CartItem {
-  id: number; productId: number; flavorId: number | null; quantity: number; product: Product
+  id: number; productId: number; flavorId: number | null; quantity: number; product: Product; flavor: Flavor | null
 }
 interface Cart { items: CartItem[] }
 
@@ -26,6 +26,9 @@ export default function StorePage() {
   const [cartOpen, setCartOpen] = useState(false)
   const [addingId, setAddingId] = useState<number | null>(null)
   const [selectedFlavors, setSelectedFlavors] = useState<Record<number, number | null>>({})
+  const [note, setNote] = useState('')
+  const [placing, setPlacing] = useState(false)
+  const [orderDone, setOrderDone] = useState<number | null>(null)
   const router = useRouter()
 
   const headerRef = useRef<HTMLElement>(null)
@@ -106,6 +109,15 @@ export default function StorePage() {
     setAddingId(null)
   }
 
+  async function updateQuantity(itemId: number, quantity: number) {
+    const res = await fetch('/api/cart', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId, quantity }),
+    })
+    if (res.ok) setCart(await res.json())
+  }
+
   async function removeFromCart(itemId: number) {
     const res = await fetch('/api/cart', {
       method: 'DELETE',
@@ -113,6 +125,25 @@ export default function StorePage() {
       body: JSON.stringify({ itemId }),
     })
     if (res.ok) setCart(await res.json())
+  }
+
+  async function placeOrder() {
+    setPlacing(true)
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: note.trim() || null }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setCart({ items: [] })
+      setNote('')
+      setOrderDone(data.orderId)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || 'Error al realizar el pedido')
+    }
+    setPlacing(false)
   }
 
   async function logout() {
@@ -255,36 +286,95 @@ export default function StorePage() {
               <h3 className="font-bold" style={{ color: 'var(--accent2)' }}>Carrito</h3>
               <button onClick={closeCart} className="cursor-pointer" style={{ color: 'var(--muted)' }}>✕</button>
             </div>
+
+            {orderDone ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                     style={{ background: 'rgba(34,197,94,0.12)' }}>
+                  <CheckCircle2 size={36} style={{ color: '#22c55e' }} />
+                </div>
+                <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--accent2)' }}>¡Pedido enviado!</h3>
+                <p className="text-sm mb-1" style={{ color: 'var(--muted)' }}>
+                  Pedido <span className="font-mono">#{orderDone}</span> recibido correctamente.
+                </p>
+                <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
+                  Nos pondremos en contacto contigo para coordinar la entrega.
+                </p>
+                <button onClick={() => { setOrderDone(null); closeCart() }}
+                        className="px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+                        style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                  Seguir comprando
+                </button>
+              </div>
+            ) : (
+              <>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {!cart?.items.length ? (
-                <p className="text-center py-12 text-sm" style={{ color: 'var(--muted)' }}>El carrito está vacío</p>
+                <div className="text-center py-16">
+                  <ShoppingCart size={32} className="mx-auto mb-3" style={{ color: 'var(--muted)' }} />
+                  <p className="text-sm" style={{ color: 'var(--muted)' }}>El carrito está vacío</p>
+                </div>
               ) : (
                 cart.items.map(item => (
-                  <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl"
+                  <div key={item.id} className="flex gap-3 p-3 rounded-xl"
                        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{item.product.name}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                        x{item.quantity} · {(item.quantity * item.product.price).toFixed(2)} €
+                      {item.flavor && (
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavor.name}</p>
+                      )}
+                      <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>
+                        {(item.quantity * item.product.price).toFixed(2)} €
                       </p>
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <button onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+                          <Minus size={14} />
+                        </button>
+                        <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>
+                          {item.quantity}
+                        </span>
+                        <button onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     </div>
                     <button onClick={() => removeFromCart(item.id)}
-                            className="text-xs px-2 py-1 rounded-lg cursor-pointer transition-all"
+                            className="self-start p-2 rounded-lg cursor-pointer transition-all"
                             style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>
-                      Quitar
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 ))
               )}
             </div>
             {cartCount > 0 && (
-              <div className="p-4" style={{ borderTop: '1px solid var(--border)' }}>
-                <div className="flex justify-between mb-4">
+              <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
+                <textarea
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  placeholder="Nota para el pedido (opcional)"
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-xl text-sm outline-none resize-none"
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}
+                />
+                <div className="flex justify-between items-center">
                   <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
                   <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{cartTotal.toFixed(2)} €</span>
                 </div>
+                <button onClick={placeOrder} disabled={placing}
+                        className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 cursor-pointer"
+                        style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                  {placing ? 'Enviando pedido...' : 'Realizar pedido'}
+                </button>
                 <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>Pago en efectivo al recoger</p>
               </div>
+            )}
+              </>
             )}
           </div>
         </div>

@@ -9,7 +9,7 @@ async function getCart(codeId: number) {
     update: {},
     include: {
       items: {
-        include: { product: true },
+        include: { product: true, flavor: true },
         orderBy: { id: 'asc' },
       },
     },
@@ -50,6 +50,29 @@ export async function POST(req: NextRequest) {
   } else {
     await prisma.cartItem.create({
       data: { cartId: cart.id, productId, flavorId: flavorId ?? null, quantity },
+    })
+  }
+
+  const updated = await getCart(user.codeId)
+  return NextResponse.json(updated)
+}
+
+export async function PATCH(req: NextRequest) {
+  const token = req.cookies.get('bs_token')?.value
+  const user = token ? verifyToken(token) : null
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { itemId, quantity } = await req.json()
+
+  const cart = await prisma.cart.findUnique({ where: { accessCodeId: user.codeId } })
+  if (!cart) return NextResponse.json({ error: 'Carrito no encontrado' }, { status: 404 })
+
+  if (quantity <= 0) {
+    await prisma.cartItem.delete({ where: { id: itemId, cartId: cart.id } })
+  } else {
+    await prisma.cartItem.update({
+      where: { id: itemId, cartId: cart.id },
+      data: { quantity },
     })
   }
 

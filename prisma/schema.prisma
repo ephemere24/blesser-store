@@ -14,6 +14,7 @@ model AccessCode {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   carts     Cart[]
+  orders    Order[]
 }
 
 model Product {
@@ -38,6 +39,7 @@ model Flavor {
   inStock   Boolean @default(true)
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId Int
+  cartItems CartItem[]
 }
 
 model Cart {
@@ -57,8 +59,30 @@ model CartItem {
   cartId    Int
   product   Product @relation(fields: [productId], references: [id])
   productId Int
+  flavor    Flavor? @relation(fields: [flavorId], references: [id])
   flavorId  Int?
   quantity  Int     @default(1)
 
   @@unique([cartId, productId, flavorId])
+}
+
+model Order {
+  id           Int         @id @default(autoincrement())
+  accessCode   AccessCode  @relation(fields: [accessCodeId], references: [id])
+  accessCodeId Int
+  items        OrderItem[]
+  total        Float
+  status       String      @default("pending")
+  note         String?
+  createdAt    DateTime    @default(now())
+}
+
+model OrderItem {
+  id          Int    @id @default(autoincrement())
+  order       Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     Int
+  productName String
+  flavorName  String?
+  price       Float
+  quantity    Int
 }
