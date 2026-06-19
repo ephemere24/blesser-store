@@ -191,6 +191,12 @@ export default function StorePage() {
           <span className="font-semibold text-sm tracking-wide" style={{ color: 'var(--accent2)' }}>Blesser Store</span>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/store/pedidos"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+            <Package size={16} />
+            <span className="hidden sm:inline">Mis pedidos</span>
+          </Link>
           <button onClick={() => setCartOpen(true)}
                   className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>

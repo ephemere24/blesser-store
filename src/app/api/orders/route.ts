@@ -21,6 +21,19 @@ async function notifyTelegram(text: string) {
   }
 }
 
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get('bs_token')?.value
+  const user = token ? verifyToken(token) : null
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const orders = await prisma.order.findMany({
+    where: { accessCodeId: user.codeId },
+    include: { items: true },
+    orderBy: { createdAt: 'desc' },
+  })
+  return NextResponse.json(orders)
+}
+
 export async function POST(req: NextRequest) {
   const token = req.cookies.get('bs_token')?.value
   const user = token ? verifyToken(token) : null
@@ -73,6 +86,8 @@ export async function POST(req: NextRequest) {
         pickupTime,
         items: {
           create: cart.items.map(i => ({
+            productId: i.productId,
+            flavorId: i.flavorId,
             productName: i.product.name,
             flavorName: i.flavor?.name ?? null,
             price: i.product.price,
