@@ -49,19 +49,43 @@ export async function POST(req: NextRequest) {
 
   if (action === 'approve') {
     const code = await generateUniqueCode()
-    await prisma.$transaction([
-      prisma.accessCode.create({
-        data: { code, clientName: request.name, phone: request.phone },
-      }),
-      prisma.accessRequest.update({
-        where: { id: requestId },
-        data: { status: 'approved', generatedCode: code },
-      }),
-    ])
-    await answerCallback(cb.id, 'Solicitud aceptada')
-    if (messageId) {
-      await editMessageText(chatId, messageId,
-        `✅ <b>Solicitud ACEPTADA</b>\n\n${baseInfo}\n\n🔑 Código generado: <code>${code}</code>\n\nPásaselo al cliente.`)
+
+    // Si el teléfono ya tiene un código, regeneramos el suyo (no creamos otro usuario)
+    const existing = await prisma.accessCode.findFirst({ where: { phone: request.phone } })
+
+    if (existing) {
+      await prisma.$transaction([
+        prisma.accessCode.update({
+          where: { id: existing.id },
+          data: { code, clientName: request.name, active: true },
+        }),
+        prisma.accessRequest.update({
+          where: { id: requestId },
+          data: { status: 'approved', generatedCode: code },
+        }),
+      ])
+      await answerCallback(cb.id, 'Código regenerado')
+      if (messageId) {
+        await editMessageText(chatId, messageId,
+          `🔁 <b>Código REGENERADO</b>\n\n${baseInfo}\n\n` +
+          `Código anterior: <s>${existing.code}</s>\n` +
+          `🔑 Código nuevo: <code>${code}</code>\n\nPásaselo al cliente.`)
+      }
+    } else {
+      await prisma.$transaction([
+        prisma.accessCode.create({
+          data: { code, clientName: request.name, phone: request.phone },
+        }),
+        prisma.accessRequest.update({
+          where: { id: requestId },
+          data: { status: 'approved', generatedCode: code },
+        }),
+      ])
+      await answerCallback(cb.id, 'Solicitud aceptada')
+      if (messageId) {
+        await editMessageText(chatId, messageId,
+          `✅ <b>Solicitud ACEPTADA</b>\n\n${baseInfo}\n\n🔑 Código generado: <code>${code}</code>\n\nPásaselo al cliente.`)
+      }
     }
   } else if (action === 'reject') {
     await prisma.accessRequest.update({
