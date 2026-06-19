@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { gsap } from 'gsap'
 
 interface Flavor { id: number; name: string; inStock: boolean }
 interface Product {
@@ -13,6 +14,18 @@ interface Product {
 
 function ImageGallery({ images, name, category }: { images: string[]; name: string; category: string }) {
   const [current, setCurrent] = useState(0)
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  function changeTo(idx: number) {
+    if (!imgRef.current) { setCurrent(idx); return }
+    gsap.to(imgRef.current, {
+      opacity: 0, scale: 1.03, duration: 0.15, ease: 'power2.in',
+      onComplete: () => {
+        setCurrent(idx)
+        gsap.to(imgRef.current, { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.out' })
+      },
+    })
+  }
 
   if (images.length === 0) {
     return (
@@ -30,25 +43,23 @@ function ImageGallery({ images, name, category }: { images: string[]; name: stri
     <div className="mb-6">
       <div className="rounded-2xl aspect-square relative overflow-hidden"
            style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-        <img src={images[current]} alt={name} className="w-full h-full object-cover" />
+        <img ref={imgRef} src={images[current]} alt={name} className="w-full h-full object-cover" />
         {images.length > 1 && (
           <>
-            <button onClick={() => setCurrent(i => (i - 1 + images.length) % images.length)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all"
+            <button onClick={() => changeTo((current - 1 + images.length) % images.length)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
               style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}>
               <ChevronLeft size={18} />
             </button>
-            <button onClick={() => setCurrent(i => (i + 1) % images.length)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all"
+            <button onClick={() => changeTo((current + 1) % images.length)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
               style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}>
               <ChevronRight size={18} />
             </button>
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
               {images.map((_, i) => (
-                <button key={i} onClick={() => setCurrent(i)}
-                  className="rounded-full transition-all cursor-pointer"
-                  style={{ width: i === current ? 20 : 6, height: 6,
-                           background: i === current ? 'white' : 'rgba(255,255,255,0.4)' }} />
+                <button key={i} onClick={() => changeTo(i)} className="rounded-full transition-all cursor-pointer"
+                  style={{ width: i === current ? 20 : 6, height: 6, background: i === current ? 'white' : 'rgba(255,255,255,0.4)' }} />
               ))}
             </div>
           </>
@@ -57,7 +68,7 @@ function ImageGallery({ images, name, category }: { images: string[]; name: stri
       {images.length > 1 && (
         <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
           {images.map((img, i) => (
-            <button key={i} onClick={() => setCurrent(i)}
+            <button key={i} onClick={() => changeTo(i)}
               className="shrink-0 w-16 h-16 rounded-xl overflow-hidden cursor-pointer transition-all"
               style={{ border: `2px solid ${i === current ? 'var(--accent2)' : 'var(--border)'}` }}>
               <img src={img} alt="" className="w-full h-full object-cover" />
@@ -78,6 +89,12 @@ export default function ProductPage() {
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
 
+  const pageRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLElement>(null)
+  const galleryRef = useRef<HTMLDivElement>(null)
+  const infoRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
   useEffect(() => {
     fetch(`/api/products/${id}`).then(r => {
       if (r.status === 401) { router.push('/'); return null }
@@ -89,15 +106,34 @@ export default function ProductPage() {
     })
   }, [id, router])
 
+  useEffect(() => {
+    if (loading || !product) return
+    const ctx = gsap.context(() => {
+      gsap.from(headerRef.current, { y: -40, opacity: 0, duration: 0.5, ease: 'power3.out' })
+      gsap.from(galleryRef.current, { opacity: 0, scale: 0.96, duration: 0.7, ease: 'power3.out', delay: 0.1 })
+      if (infoRef.current) {
+        gsap.from(Array.from(infoRef.current.children), {
+          opacity: 0, y: 25, duration: 0.5, stagger: 0.07, ease: 'power3.out', delay: 0.2,
+        })
+      }
+    }, pageRef)
+    return () => ctx.revert()
+  }, [loading, product])
+
   async function addToCart() {
     if (!product) return
     setAdding(true)
+    if (btnRef.current) gsap.to(btnRef.current, { scale: 0.96, duration: 0.1, yoyo: true, repeat: 1 })
     const res = await fetch('/api/cart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productId: product.id, flavorId: selectedFlavor }),
     })
-    if (res.ok) { setAdded(true); setTimeout(() => setAdded(false), 2000) }
+    if (res.ok) {
+      setAdded(true)
+      if (btnRef.current) gsap.fromTo(btnRef.current, { scale: 1.05 }, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' })
+      setTimeout(() => setAdded(false), 2000)
+    }
     setAdding(false)
   }
 
@@ -114,30 +150,25 @@ export default function ProductPage() {
   const images: string[] = JSON.parse(product.images || '[]')
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <header className="sticky top-0 z-40 px-4 py-3 flex items-center gap-3"
-              style={{ background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)' }}>
+    <div ref={pageRef} className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <header ref={headerRef} className="sticky top-0 z-40 px-4 py-3 flex items-center gap-3"
+              style={{ background: 'rgba(10,10,10,0.9)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
         <Link href="/store" className="p-2 rounded-xl transition-all cursor-pointer"
               style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
           <ArrowLeft size={16} />
         </Link>
-        <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>
-          {product.category}
-        </span>
+        <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>{product.category}</span>
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <ImageGallery images={images} name={product.name} category={product.category} />
+        <div ref={galleryRef}>
+          <ImageGallery images={images} name={product.name} category={product.category} />
+        </div>
 
-        {/* Info */}
-        <div className="space-y-4">
+        <div ref={infoRef} className="space-y-4">
           <div className="flex items-start justify-between gap-4">
-            <h1 className="text-2xl font-bold leading-tight" style={{ color: 'var(--accent2)' }}>
-              {product.name}
-            </h1>
-            <span className="text-2xl font-bold shrink-0" style={{ color: 'var(--accent2)' }}>
-              {product.price} €
-            </span>
+            <h1 className="text-2xl font-bold leading-tight" style={{ color: 'var(--accent2)' }}>{product.name}</h1>
+            <span className="text-2xl font-bold shrink-0" style={{ color: 'var(--accent2)' }}>{product.price} €</span>
           </div>
 
           {product.specs && (
@@ -148,9 +179,7 @@ export default function ProductPage() {
           )}
 
           {product.description && (
-            <p className="text-sm leading-relaxed" style={{ color: 'var(--accent)' }}>
-              {product.description}
-            </p>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--accent)' }}>{product.description}</p>
           )}
 
           {product.flavors.length > 0 && (
@@ -168,30 +197,24 @@ export default function ProductPage() {
                       color: selectedFlavor === f.id ? 'var(--bg)' : 'var(--accent)',
                       border: `1px solid ${selectedFlavor === f.id ? 'var(--accent2)' : 'var(--border)'}`,
                     }}>
-                    <CheckCircle size={12} />
-                    {f.name}
+                    <CheckCircle size={12} />{f.name}
                   </button>
                 ))}
                 {outOfStockFlavors.map(f => (
-                  <span key={f.id}
-                    className="px-3 py-1.5 rounded-xl text-sm flex items-center gap-1.5 opacity-40"
+                  <span key={f.id} className="px-3 py-1.5 rounded-xl text-sm flex items-center gap-1.5 opacity-40"
                     style={{ background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-                    <XCircle size={12} />
-                    {f.name}
+                    <XCircle size={12} />{f.name}
                   </span>
                 ))}
               </div>
             </div>
           )}
 
-          <button
+          <button ref={btnRef}
             onClick={addToCart}
             disabled={adding || inStockFlavors.length === 0}
-            className="w-full py-4 rounded-2xl font-semibold text-base transition-all disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer mt-4"
-            style={{
-              background: added ? '#22c55e' : 'var(--accent2)',
-              color: 'var(--bg)',
-            }}>
+            className="w-full py-4 rounded-2xl font-semibold text-base transition-colors disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer mt-4"
+            style={{ background: added ? '#22c55e' : 'var(--accent2)', color: 'var(--bg)' }}>
             <ShoppingCart size={18} />
             {added ? '¡Añadido!' : adding ? 'Añadiendo...' : inStockFlavors.length === 0 ? 'Sin stock' : 'Añadir al carrito'}
           </button>
