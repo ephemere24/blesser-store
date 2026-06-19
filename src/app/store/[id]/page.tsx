@@ -201,9 +201,6 @@ export default function ProductPage() {
                       border: `1px solid ${selectedFlavor === f.id ? 'var(--accent2)' : 'var(--border)'}`,
                     }}>
                     <CheckCircle size={12} />{f.name}
-                    {f.stock <= 5 && (
-                      <span className="text-xs opacity-70">· quedan {f.stock}</span>
-                    )}
                   </button>
                 ))}
                 {outOfStockFlavors.map(f => (

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   const stockErrors: string[] = []
   for (const i of cart.items) {
     if (i.flavor && i.flavor.stock < i.quantity) {
-      stockErrors.push(`${i.product.name} — ${i.flavor.name}: quedan ${i.flavor.stock}`)
+      stockErrors.push(`${i.product.name} — ${i.flavor.name}`)
     }
   }
   if (stockErrors.length > 0) {

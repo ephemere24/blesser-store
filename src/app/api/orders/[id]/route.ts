@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
-import { applyOrderEdit, applyOrderSave, notifyOrderModified, OrderEditError, EditOp, DesiredItem } from '@/lib/orders'
+import { applyOrderEdit, applyOrderSave, notifyOrderChange, OrderEditError, EditOp, DesiredItem } from '@/lib/orders'
 import { isValidPickup } from '@/lib/pickup'
 
 // Guardar el pedido completo de una vez (un solo aviso a Telegram)
@@ -31,7 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const updated = await applyOrderSave(orderId, body.items, { pickupDate: body.pickupDate, pickupTime: body.pickupTime })
     const accessCode = await prisma.accessCode.findUnique({ where: { id: user.codeId } })
     const label = accessCode?.clientName ? `${accessCode.clientName} (${user.code})` : user.code
-    await notifyOrderModified(orderId, label, `Actualizó su pedido · Total: ${updated?.total.toFixed(2)} €`)
+    if (updated) await notifyOrderChange(updated, label, '✏️ Pedido MODIFICADO')
     return NextResponse.json(updated)
   } catch (e) {
     if (e instanceof OrderEditError) {
@@ -39,14 +39,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     throw e
   }
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  setQty: 'Cambió una cantidad',
-  removeItem: 'Eliminó una línea',
-  addItem: 'Añadió un producto',
-  cancel: '❌ Canceló el pedido',
-  setPickup: '📅 Cambió el día/hora de recogida',
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -80,7 +72,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await applyOrderEdit(orderId, edit)
     const accessCode = await prisma.accessCode.findUnique({ where: { id: user.codeId } })
     const label = accessCode?.clientName ? `${accessCode.clientName} (${user.code})` : user.code
-    await notifyOrderModified(orderId, label, ACTION_LABELS[edit.op] ?? 'Modificó el pedido')
+    if (updated) {
+      const title = edit.op === 'cancel' ? '❌ Pedido CANCELADO' : '✏️ Pedido MODIFICADO'
+      await notifyOrderChange(updated, label, title)
+    }
     return NextResponse.json(updated)
   } catch (e) {
     if (e instanceof OrderEditError) {

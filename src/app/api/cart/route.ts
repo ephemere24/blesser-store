@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const wanted = (existing?.quantity ?? 0) + quantity
     if (!flavor || flavor.stock < wanted) {
       return NextResponse.json(
-        { error: `Sin stock suficiente. Quedan ${flavor?.stock ?? 0} unidades.` },
+        { error: 'No hay stock suficiente de este sabor.' },
         { status: 409 }
       )
     }
@@ -87,7 +87,7 @@ export async function PATCH(req: NextRequest) {
       const flavor = await prisma.flavor.findUnique({ where: { id: item.flavorId } })
       if (!flavor || flavor.stock < quantity) {
         return NextResponse.json(
-          { error: `Sin stock suficiente. Quedan ${flavor?.stock ?? 0} unidades.` },
+          { error: 'No hay stock suficiente de este sabor.' },
           { status: 409 }
         )
       }

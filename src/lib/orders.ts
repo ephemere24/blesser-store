@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { sendMessage } from '@/lib/telegram'
+import { formatDayLabel } from '@/lib/pickup'
 
 export type EditOp =
   | { op: 'setQty'; itemId: number; quantity: number }
@@ -32,7 +33,7 @@ async function adjustStock(flavorId: number, deltaOrdered: number) {
   const flavor = await prisma.flavor.findUnique({ where: { id: flavorId } })
   if (!flavor) return
   if (deltaOrdered > 0 && flavor.stock < deltaOrdered) {
-    throw new OrderEditError(`Sin stock suficiente. Quedan ${flavor.stock} unidades.`, 409)
+    throw new OrderEditError(`No hay stock suficiente de ${flavor.name}.`, 409)
   }
   const newStock = Math.max(0, flavor.stock - deltaOrdered)
   await prisma.flavor.update({
@@ -139,6 +140,28 @@ export async function notifyOrderModified(orderId: number, clientLabel: string, 
   await sendMessage(`✏️ <b>Pedido #${orderId} modificado</b>\n\n👤 ${clientLabel}\n${action}`)
 }
 
+type OrderForNotify = {
+  id: number; total: number; pickupDate: string | null; pickupTime: string | null
+  items: { productName: string; flavorName: string | null; price: number; quantity: number }[]
+}
+
+// Aviso detallado a Telegram (contenido completo del pedido)
+export async function notifyOrderChange(order: OrderForNotify, clientLabel: string, title: string) {
+  const lines = order.items.map(
+    i => `• ${i.quantity}x ${i.productName}${i.flavorName ? ` — ${i.flavorName}` : ''} · ${(i.price * i.quantity).toFixed(2)} €`
+  )
+  const pickup = order.pickupDate && order.pickupTime
+    ? `${formatDayLabel(new Date(order.pickupDate + 'T00:00:00'))} a las ${order.pickupTime}`
+    : '—'
+  const msg =
+    `${title} <b>#${order.id}</b>\n\n` +
+    `👤 Cliente: <b>${clientLabel}</b>\n` +
+    `📅 Recogida: <b>${pickup}</b>\n\n` +
+    `${lines.join('\n') || '(sin productos)'}\n\n` +
+    `💰 <b>Total: ${order.total.toFixed(2)} €</b>`
+  await sendMessage(msg)
+}
+
 export type DesiredItem = { productId: number; flavorId: number | null; quantity: number }
 
 /**
@@ -186,7 +209,7 @@ export async function applyOrderSave(
     if (!flavor) continue
     const delta = (desByFlavor.get(fid) || 0) - (curByFlavor.get(fid) || 0)
     if (delta > 0 && flavor.stock < delta) {
-      throw new OrderEditError(`Sin stock suficiente de ${flavor.name}. Quedan ${flavor.stock} unidades.`, 409)
+      throw new OrderEditError(`No hay stock suficiente de ${flavor.name}.`, 409)
     }
     const newStock = Math.max(0, flavor.stock - delta)
     stockUpdates.push({ id: fid, stock: newStock, inStock: newStock > 0 })

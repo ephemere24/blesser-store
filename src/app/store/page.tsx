@@ -68,6 +68,14 @@ export default function StorePage() {
     setEditPickup(false)
   }
 
+  async function refreshActiveOrder() {
+    const orders = await fetch('/api/orders').then(r => r.ok ? r.json() : [])
+    const pending = (orders || []).find((o: Order) => o.status === 'pending') || null
+    setActiveOrder(pending)
+    if (pending) initDraft(pending)
+    else { setDraftItems([]); setDirty(false) }
+  }
+
   function loadAll() {
     return Promise.all([
       fetch('/api/products').then(r => { if (r.status === 401) { router.push('/'); return [] } return r.json() }),
@@ -143,12 +151,13 @@ export default function StorePage() {
       const flavor = flavorId ? product.flavors.find(f => f.id === flavorId) : null
       const existing = draftItems.find(i => i.productId === productId && i.flavorId === flavorId)
       const newQty = (existing?.quantity ?? 0) + 1
-      if (flavor && newQty > flavor.stock) { alert(`Sin stock suficiente. Quedan ${flavor.stock} unidades.`); return }
+      if (flavor && newQty > flavor.stock) { alert('No hay más unidades disponibles de este sabor.'); return }
       setDraftItems(prev => {
         if (existing) return prev.map(i => i === existing ? { ...i, quantity: newQty } : i)
         return [...prev, { productId, flavorId, productName: product.name, flavorName: flavor?.name ?? null, price: product.price, quantity: 1 }]
       })
       setDirty(true)
+      setOrderDone(null)
       setJustAddedId(productId)
       setTimeout(() => setJustAddedId(c => c === productId ? null : c), 1000)
       return
@@ -168,7 +177,7 @@ export default function StorePage() {
     const q = Math.max(0, newQty)
     if (q > item.quantity) {
       const stock = flavorStock(item.productId, item.flavorId)
-      if (stock !== null && q > stock) { alert(`Sin stock suficiente. Quedan ${stock} unidades.`); return }
+      if (stock !== null && q > stock) { alert('No hay más unidades disponibles de este sabor.'); return }
     }
     setDraftItems(prev => prev.flatMap(i => i === item ? (q <= 0 ? [] : [{ ...i, quantity: q }]) : [i]))
     setDirty(true)
@@ -249,7 +258,7 @@ export default function StorePage() {
       const data = await res.json()
       setCart({ items: [] })
       setNote(''); setPickupDate(''); setPickupTime('')
-      setActiveOrder(data.order); initDraft(data.order)
+      await refreshActiveOrder()
       setOrderDone(data.orderId)
     } else {
       const err = await res.json().catch(() => ({}))
@@ -323,7 +332,7 @@ export default function StorePage() {
           <div className="mb-6 p-3 rounded-xl flex items-center justify-between gap-3"
                style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
             <span className="text-sm" style={{ color: '#f59e0b' }}>
-              Tienes un pedido abierto (#{activeOrder.id}).{dirty ? ' Tienes cambios sin guardar.' : ' Lo que añadas se sumará a ese pedido.'}
+              Tienes un pedido abierto.{dirty ? ' Tienes cambios sin guardar.' : ' Lo que añadas se sumará a ese pedido.'}
             </span>
             <button onClick={() => setPanelOpen(true)}
                     className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold cursor-pointer"
@@ -423,7 +432,7 @@ export default function StorePage() {
                style={{ background: 'var(--surface)', borderLeft: '1px solid var(--border)', transform: 'translateX(100%)' }}>
             <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--border)' }}>
               <h3 className="font-bold flex items-center gap-2" style={{ color: 'var(--accent2)' }}>
-                {activeOrder ? `Tu pedido #${activeOrder.id}` : 'Carrito'}
+                {activeOrder ? 'Tu pedido' : 'Carrito'}
                 {dirty && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>sin guardar</span>}
               </h3>
               <button onClick={closePanel} className="cursor-pointer" style={{ color: 'var(--muted)' }}>✕</button>
@@ -436,7 +445,7 @@ export default function StorePage() {
                 </div>
                 <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--accent2)' }}>¡Pedido enviado!</h3>
                 <p className="text-sm mb-1" style={{ color: 'var(--muted)' }}>
-                  Pedido <span className="font-mono">#{orderDone}</span> recibido correctamente.
+                  Tu pedido se ha recibido correctamente.
                 </p>
                 <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
                   Puedes seguir añadiendo productos desde el catálogo. Recuerda <b>guardar</b> los cambios.

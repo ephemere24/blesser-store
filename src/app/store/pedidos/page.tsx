@@ -59,7 +59,7 @@ export default function MyOrdersHistoryPage() {
                  style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold" style={{ color: 'var(--accent2)' }}>Pedido #{order.id}</span>
+                  <span className="font-bold" style={{ color: 'var(--accent2)' }}>Pedido</span>
                   <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                         style={{ background: `${STATUS_COLORS[order.status]}22`, color: STATUS_COLORS[order.status] }}>
                     {STATUS_LABELS[order.status] ?? order.status}
