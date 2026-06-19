@@ -47,3 +47,4 @@ prisma/dev.db-journal
 # uploads (fotos locales, en producción van en el servidor)
 public/uploads/*
 !public/uploads/.gitkeep
+backup-data.json
