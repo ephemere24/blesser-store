@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2 } from 'lucide-react'
+import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { getPickupDays, getTimeSlots } from '@/lib/pickup'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -29,7 +30,12 @@ export default function StorePage() {
   const [note, setNote] = useState('')
   const [placing, setPlacing] = useState(false)
   const [orderDone, setOrderDone] = useState<number | null>(null)
+  const [pickupDate, setPickupDate] = useState('')
+  const [pickupTime, setPickupTime] = useState('')
   const router = useRouter()
+
+  const pickupDays = useMemo(() => getPickupDays(), [])
+  const timeSlots = useMemo(() => pickupDate ? getTimeSlots(pickupDate) : [], [pickupDate])
 
   const headerRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -130,16 +136,22 @@ export default function StorePage() {
   }
 
   async function placeOrder() {
+    if (!pickupDate || !pickupTime) {
+      alert('Selecciona el día y la hora de recogida')
+      return
+    }
     setPlacing(true)
     const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note: note.trim() || null }),
+      body: JSON.stringify({ note: note.trim() || null, pickupDate, pickupTime }),
     })
     if (res.ok) {
       const data = await res.json()
       setCart({ items: [] })
       setNote('')
+      setPickupDate('')
+      setPickupTime('')
       setOrderDone(data.orderId)
     } else {
       const err = await res.json().catch(() => ({}))
@@ -356,6 +368,62 @@ export default function StorePage() {
             </div>
             {cartCount > 0 && (
               <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
+                {/* Recogida */}
+                <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} style={{ color: 'var(--accent2)' }} />
+                    <span className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>
+                      Recogida · L-S de 14:00 a 21:00
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}>
+                      <Calendar size={12} /> Día
+                    </p>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {pickupDays.map(d => (
+                        <button key={d.value}
+                          onClick={() => { setPickupDate(d.value); setPickupTime('') }}
+                          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer capitalize transition-all"
+                          style={{
+                            background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
+                            color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                            border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                          }}>
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {pickupDate && (
+                    <div>
+                      <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}>
+                        <Clock size={12} /> Hora
+                      </p>
+                      {timeSlots.length === 0 ? (
+                        <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas disponibles hoy, elige otro día.</p>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto">
+                          {timeSlots.map(t => (
+                            <button key={t}
+                              onClick={() => setPickupTime(t)}
+                              className="px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
+                              style={{
+                                background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
+                                color: pickupTime === t ? 'var(--bg)' : 'var(--accent)',
+                                border: `1px solid ${pickupTime === t ? 'var(--accent2)' : 'var(--border)'}`,
+                              }}>
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <textarea
                   value={note}
                   onChange={e => setNote(e.target.value)}
@@ -368,10 +436,12 @@ export default function StorePage() {
                   <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
                   <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{cartTotal.toFixed(2)} €</span>
                 </div>
-                <button onClick={placeOrder} disabled={placing}
+                <button onClick={placeOrder} disabled={placing || !pickupDate || !pickupTime}
                         className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 cursor-pointer"
                         style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                  {placing ? 'Enviando pedido...' : 'Realizar pedido'}
+                  {placing ? 'Enviando pedido...'
+                    : !pickupDate || !pickupTime ? 'Elige día y hora de recogida'
+                    : 'Realizar pedido'}
                 </button>
                 <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>Pago en efectivo al recoger</p>
               </div>

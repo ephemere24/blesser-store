@@ -75,6 +75,8 @@ model Order {
   total        Float
   status       String      @default("pending")
   note         String?
+  pickupDate   String?
+  pickupTime   String?
   createdAt    DateTime    @default(now())
 }
 

@@ -8,6 +8,7 @@ import { ArrowLeft, Package, Trash2, RefreshCw } from 'lucide-react'
 interface OrderItem { id: number; productName: string; flavorName: string | null; price: number; quantity: number }
 interface Order {
   id: number; total: number; status: string; note: string | null; createdAt: string
+  pickupDate: string | null; pickupTime: string | null
   items: OrderItem[]; accessCode: { code: string; clientName: string | null }
 }
 
@@ -95,6 +96,11 @@ export default function AdminOrdersPage() {
                   <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
                     {new Date(order.createdAt).toLocaleString('es-ES')}
                   </p>
+                  {order.pickupDate && order.pickupTime && (
+                    <p className="text-xs mt-1 font-medium" style={{ color: 'var(--accent2)' }}>
+                      📅 Recogida: {new Date(order.pickupDate + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })} a las {order.pickupTime}
+                    </p>
+                  )}
                 </div>
                 <button onClick={() => remove(order.id)} className="p-2 rounded-lg cursor-pointer"
                         style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>

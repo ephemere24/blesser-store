@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
+import { isValidPickup, formatDayLabel } from '@/lib/pickup'
 
 async function notifyTelegram(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
@@ -25,7 +26,15 @@ export async function POST(req: NextRequest) {
   const user = token ? verifyToken(token) : null
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { note } = await req.json().catch(() => ({ note: null }))
+  const { note, pickupDate, pickupTime } = await req.json().catch(() => ({ note: null, pickupDate: null, pickupTime: null }))
+
+  // Validar día y hora de recogida
+  if (!pickupDate || !pickupTime) {
+    return NextResponse.json({ error: 'Selecciona el día y la hora de recogida' }, { status: 400 })
+  }
+  if (!isValidPickup(pickupDate, pickupTime)) {
+    return NextResponse.json({ error: 'El día u hora de recogida no son válidos' }, { status: 400 })
+  }
 
   const cart = await prisma.cart.findUnique({
     where: { accessCodeId: user.codeId },
@@ -60,6 +69,8 @@ export async function POST(req: NextRequest) {
         accessCodeId: user.codeId,
         total,
         note: note || null,
+        pickupDate,
+        pickupTime,
         items: {
           create: cart.items.map(i => ({
             productName: i.product.name,
@@ -94,9 +105,11 @@ export async function POST(req: NextRequest) {
   const lines = order.items.map(
     i => `• ${i.quantity}x ${i.productName}${i.flavorName ? ` — ${i.flavorName}` : ''} · ${(i.price * i.quantity).toFixed(2)} €`
   )
+  const pickupLabel = `${formatDayLabel(new Date(pickupDate + 'T00:00:00'))} a las ${pickupTime}`
   const message =
     `🛒 <b>Nuevo pedido #${order.id}</b>\n\n` +
-    `👤 Cliente: <b>${clientLabel}</b>\n\n` +
+    `👤 Cliente: <b>${clientLabel}</b>\n` +
+    `📅 Recogida: <b>${pickupLabel}</b>\n\n` +
     `${lines.join('\n')}\n\n` +
     `💰 <b>Total: ${total.toFixed(2)} €</b>` +
     (note ? `\n\n📝 Nota: ${note}` : '')
