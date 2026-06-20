@@ -8,6 +8,8 @@ export default function LoginPage() {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [remember, setRemember] = useState(true)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [showRequest, setShowRequest] = useState(false)
   const [reqName, setReqName] = useState('')
   const [reqPhone, setReqPhone] = useState('')
@@ -23,7 +25,21 @@ export default function LoginPage() {
   const formRef = useRef<HTMLFormElement>(null)
   const footerRef = useRef<HTMLParagraphElement>(null)
 
+  // Si la sesión sigue activa, entrar directo. Si no, autorrellenar el código guardado.
   useEffect(() => {
+    let cancelled = false
+    fetch('/api/cart').then(r => {
+      if (cancelled) return
+      if (r.ok) { router.replace('/store'); return }
+      const saved = localStorage.getItem('bs_code')
+      if (saved) { setCode(saved); setRemember(true) }
+      setCheckingSession(false)
+    }).catch(() => { if (!cancelled) setCheckingSession(false) })
+    return () => { cancelled = true }
+  }, [router])
+
+  useEffect(() => {
+    if (checkingSession) return
     const ctx = gsap.context(() => {
       gsap.set([logoRef.current, titleRef.current, subtitleRef.current, formRef.current, footerRef.current], {
         opacity: 0, y: 30,
@@ -36,7 +52,7 @@ export default function LoginPage() {
         .to(footerRef.current, { opacity: 1, y: 0, duration: 0.5 }, '-=0.3')
     }, containerRef)
     return () => ctx.revert()
-  }, [])
+  }, [checkingSession])
 
   async function handleRequest(e: React.FormEvent) {
     e.preventDefault()
@@ -70,6 +86,8 @@ export default function LoginPage() {
     })
 
     if (res.ok) {
+      if (remember) localStorage.setItem('bs_code', code.trim())
+      else localStorage.removeItem('bs_code')
       gsap.to(containerRef.current, { opacity: 0, y: -20, duration: 0.4, ease: 'power2.in', onComplete: () => router.push('/store') })
     } else {
       const data = await res.json()
@@ -77,6 +95,14 @@ export default function LoginPage() {
       gsap.fromTo(formRef.current, { x: -8 }, { x: 0, duration: 0.4, ease: 'elastic.out(1, 0.3)' })
       setLoading(false)
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+        <div className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -120,6 +146,12 @@ export default function LoginPage() {
           {error && (
             <p className="text-center text-sm" style={{ color: 'var(--danger)' }}>{error}</p>
           )}
+
+          <label className="flex items-center justify-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
+                   className="w-4 h-4 cursor-pointer" style={{ accentColor: 'var(--accent2)' }} />
+            <span className="text-sm" style={{ color: 'var(--muted)' }}>Recordar mi código en este dispositivo</span>
+          </label>
 
           <button
             type="submit"
