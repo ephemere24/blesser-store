@@ -88,6 +88,7 @@ export default function ProductPage() {
   const [selectedFlavor, setSelectedFlavor] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
+  const [activeOrderId, setActiveOrderId] = useState<number | null>(null)
 
   const pageRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLElement>(null)
@@ -103,6 +104,11 @@ export default function ProductPage() {
     }).then(data => {
       if (data) setProduct(data)
       setLoading(false)
+    })
+    // ¿Hay un pedido abierto? Entonces se añade a ese pedido, no al carrito.
+    fetch('/api/orders').then(r => r.ok ? r.json() : []).then((orders) => {
+      const pending = (orders || []).find((o: { status: string; id: number }) => o.status === 'pending')
+      setActiveOrderId(pending?.id ?? null)
     })
   }, [id, router])
 
@@ -124,18 +130,22 @@ export default function ProductPage() {
     if (!product) return
     setAdding(true)
     if (btnRef.current) gsap.to(btnRef.current, { scale: 0.96, duration: 0.1, yoyo: true, repeat: 1 })
-    const res = await fetch('/api/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: product.id, flavorId: selectedFlavor }),
-    })
+    const res = activeOrderId
+      ? await fetch(`/api/orders/${activeOrderId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'addItem', productId: product.id, flavorId: selectedFlavor, quantity: 1 }),
+        })
+      : await fetch('/api/cart', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: product.id, flavorId: selectedFlavor }),
+        })
     if (res.ok) {
       setAdded(true)
       if (btnRef.current) gsap.fromTo(btnRef.current, { scale: 1.05 }, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' })
       setTimeout(() => setAdded(false), 900)
     } else {
       const err = await res.json().catch(() => ({}))
-      alert(err.error || 'No se pudo añadir al carrito')
+      alert(err.error || 'No se pudo añadir')
     }
     setAdding(false)
   }
@@ -219,7 +229,7 @@ export default function ProductPage() {
             className="w-full py-4 rounded-2xl font-semibold text-base transition-colors disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer mt-4"
             style={{ background: added ? '#22c55e' : 'var(--accent2)', color: 'var(--bg)' }}>
             <ShoppingCart size={18} />
-            {added ? '¡Añadido!' : adding ? 'Añadiendo...' : inStockFlavors.length === 0 ? 'Sin stock' : 'Añadir al carrito'}
+            {added ? '✓ Añadido' : adding ? 'Añadiendo...' : inStockFlavors.length === 0 ? 'Sin stock' : activeOrderId ? 'Añadir a mi pedido' : 'Añadir al carrito'}
           </button>
         </div>
       </div>

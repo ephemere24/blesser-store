@@ -84,11 +84,12 @@ model Order {
   items        OrderItem[]
   total        Float
   status       String      @default("pending")
-  note         String?
-  pickupDate   String?
-  pickupTime   String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @default(now()) @updatedAt
+  note           String?
+  pickupDate     String?
+  pickupTime     String?
+  pendingChanges Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
 }
 
 model OrderItem {

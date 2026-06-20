@@ -21,10 +21,9 @@ interface CartItem {
 interface Cart { items: CartItem[] }
 interface OrderItem { id: number; productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
 interface Order {
-  id: number; total: number; status: string; note: string | null
+  id: number; total: number; status: string; note: string | null; pendingChanges: boolean
   pickupDate: string | null; pickupTime: string | null; items: OrderItem[]
 }
-interface DraftItem { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
 
 export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -37,43 +36,25 @@ export default function StorePage() {
   const [selectedFlavors, setSelectedFlavors] = useState<Record<number, number | null>>({})
   const [note, setNote] = useState('')
   const [placing, setPlacing] = useState(false)
-  const [orderDone, setOrderDone] = useState<number | null>(null)
+  const [orderDone, setOrderDone] = useState(false)
   const [pickupDate, setPickupDate] = useState('')
   const [pickupTime, setPickupTime] = useState('')
-  // Borrador del pedido abierto
-  const [draftItems, setDraftItems] = useState<DraftItem[]>([])
-  const [draftDate, setDraftDate] = useState('')
-  const [draftTime, setDraftTime] = useState('')
-  const [dirty, setDirty] = useState(false)
   const [editPickup, setEditPickup] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [busy, setBusy] = useState(false)
   const router = useRouter()
 
   const pickupDays = useMemo(() => getPickupDays(), [])
   const timeSlots = useMemo(() => pickupDate ? getTimeSlots(pickupDate) : [], [pickupDate])
-  const draftSlots = useMemo(() => draftDate ? getTimeSlots(draftDate) : [], [draftDate])
 
   const headerRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const cartPanelRef = useRef<HTMLDivElement>(null)
 
-  function initDraft(order: Order) {
-    setDraftItems(order.items.map(i => ({
-      productId: i.productId!, flavorId: i.flavorId, productName: i.productName,
-      flavorName: i.flavorName, price: i.price, quantity: i.quantity,
-    })))
-    setDraftDate(order.pickupDate || '')
-    setDraftTime(order.pickupTime || '')
-    setDirty(false)
-    setEditPickup(false)
-  }
+  const dirty = activeOrder?.pendingChanges ?? false
 
-  async function refreshActiveOrder() {
-    const orders = await fetch('/api/orders').then(r => r.ok ? r.json() : [])
-    const pending = (orders || []).find((o: Order) => o.status === 'pending') || null
-    setActiveOrder(pending)
-    if (pending) initDraft(pending)
-    else { setDraftItems([]); setDirty(false) }
+  async function refreshProducts() {
+    const r = await fetch('/api/products')
+    if (r.ok) setProducts(await r.json())
   }
 
   function loadAll() {
@@ -84,16 +65,13 @@ export default function StorePage() {
     ]).then(([prods, cartData, orders]) => {
       setProducts(prods || [])
       setCart(cartData)
-      const pending = (orders || []).find((o: Order) => o.status === 'pending') || null
-      setActiveOrder(pending)
-      if (pending) initDraft(pending)
+      setActiveOrder((orders || []).find((o: Order) => o.status === 'pending') || null)
       setLoading(false)
     })
   }
 
   useEffect(() => { loadAll() }, [router])
 
-  // Avisar al cerrar/recargar la pestaña con cambios sin guardar
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = '' } }
     window.addEventListener('beforeunload', h)
@@ -120,15 +98,9 @@ export default function StorePage() {
     if (panelOpen) gsap.fromTo(cartPanelRef.current, { x: '100%' }, { x: '0%', duration: 0.4, ease: 'power3.out' })
   }, [panelOpen])
 
-  function doClosePanel() {
+  function closePanel() {
     if (!cartPanelRef.current) { setPanelOpen(false); return }
     gsap.to(cartPanelRef.current, { x: '100%', duration: 0.3, ease: 'power3.in', onComplete: () => setPanelOpen(false) })
-  }
-  function closePanel() {
-    // Cerrar el panel NO descarta nada: el borrador se mantiene mientras navegas
-    // por el catálogo. El aviso de "sin guardar" solo salta al salir de verdad
-    // (cerrar sesión, ir al historial o cerrar la pestaña).
-    doClosePanel()
   }
 
   function guardedNav(fn: () => void) {
@@ -136,122 +108,73 @@ export default function StorePage() {
     fn()
   }
 
-  function flavorStock(productId: number, flavorId: number | null): number | null {
-    if (!flavorId) return null
-    const p = products.find(p => p.id === productId)
-    return p?.flavors.find(f => f.id === flavorId)?.stock ?? 0
+  // --- Pedido abierto (servidor = fuente de verdad) ---
+  async function orderPatch(body: object): Promise<boolean> {
+    if (!activeOrder) return false
+    const res = await fetch(`/api/orders/${activeOrder.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (res.ok) { setActiveOrder(await res.json()); return true }
+    const err = await res.json().catch(() => ({}))
+    alert(err.error || 'No se pudo modificar el pedido')
+    return false
   }
 
-  // Añadir producto al borrador (local) o al carrito (si no hay pedido abierto)
+  // --- Añadir producto: al pedido abierto o al carrito ---
   async function addProduct(productId: number) {
     const flavorId = selectedFlavors[productId] ?? null
-    if (activeOrder) {
-      const product = products.find(p => p.id === productId)
-      if (!product) return
-      const flavor = flavorId ? product.flavors.find(f => f.id === flavorId) : null
-      // Comprobación de stock (orientativa; el servidor valida al guardar)
-      const currentQty = draftItems.find(i => i.productId === productId && i.flavorId === flavorId)?.quantity ?? 0
-      if (flavor && currentQty + 1 > flavor.stock) { alert('No hay más unidades disponibles de este sabor.'); return }
-      setDraftItems(prev => {
-        const idx = prev.findIndex(i => i.productId === productId && i.flavorId === flavorId)
-        if (idx >= 0) {
-          const copy = [...prev]
-          copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 }
-          return copy
-        }
-        return [...prev, { productId, flavorId, productName: product.name, flavorName: flavor?.name ?? null, price: product.price, quantity: 1 }]
-      })
-      setDirty(true)
-      setOrderDone(null)
-      setJustAddedId(productId)
-      setTimeout(() => setJustAddedId(c => c === productId ? null : c), 1000)
-      return
-    }
     setAddingId(productId)
-    const res = await fetch('/api/cart', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId, flavorId }),
-    })
-    if (res.ok) setCart(await res.json())
-    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo añadir al carrito') }
+    if (activeOrder) {
+      const ok = await orderPatch({ op: 'addItem', productId, flavorId, quantity: 1 })
+      if (ok) {
+        setJustAddedId(productId)
+        setTimeout(() => setJustAddedId(c => c === productId ? null : c), 1000)
+      }
+    } else {
+      const res = await fetch('/api/cart', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, flavorId }),
+      })
+      if (res.ok) setCart(await res.json())
+      else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo añadir al carrito') }
+    }
     setAddingId(null)
   }
 
-  // --- Borrador del pedido abierto (local) ---
-  function draftSetQty(idx: number, newQty: number) {
-    const item = draftItems[idx]
-    if (!item) return
-    const q = Math.max(0, newQty)
-    if (q > item.quantity) {
-      const stock = flavorStock(item.productId, item.flavorId)
-      if (stock !== null && q > stock) { alert('No hay más unidades disponibles de este sabor.'); return }
-    }
-    setDraftItems(prev => prev.flatMap((i, n) => n === idx ? (q <= 0 ? [] : [{ ...i, quantity: q }]) : [i]))
-    setDirty(true)
+  async function orderConfirm() {
+    setBusy(true)
+    await orderPatch({ op: 'confirm' })
+    await refreshProducts()
+    setBusy(false)
   }
-  function draftRemove(idx: number) {
-    setDraftItems(prev => prev.filter((_, n) => n !== idx))
-    setDirty(true)
-  }
-  function chooseDraftTime(time: string) {
-    setDraftTime(time)
-    setDirty(true)
-    setEditPickup(false)
-  }
-
-  async function saveOrder() {
-    if (!activeOrder) return
-    if (draftItems.length === 0) { alert('El pedido no puede quedar vacío. Si no quieres nada, cancélalo.'); return }
-    if (!draftDate || !draftTime) { alert('Selecciona el día y la hora de recogida'); return }
-    setSaving(true)
-    const res = await fetch(`/api/orders/${activeOrder.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: draftItems.map(i => ({ productId: i.productId, flavorId: i.flavorId, quantity: i.quantity })),
-        pickupDate: draftDate, pickupTime: draftTime,
-      }),
-    })
-    if (res.ok) {
-      const updated = await res.json()
-      setActiveOrder(updated)
-      initDraft(updated)
-      // refrescar stock del catálogo
-      fetch('/api/products').then(r => r.ok ? r.json() : products).then(setProducts)
-    } else {
-      const err = await res.json().catch(() => ({}))
-      alert(err.error || 'No se pudo guardar el pedido')
-    }
-    setSaving(false)
-  }
-
   async function orderCancel() {
-    if (!activeOrder) return
     if (!confirm('¿Cancelar este pedido?')) return
-    const res = await fetch(`/api/orders/${activeOrder.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'cancel' }),
+    setBusy(true)
+    const res = await fetch(`/api/orders/${activeOrder!.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'cancel' }),
     })
-    if (res.ok) {
-      setActiveOrder(null); setDraftItems([]); setDirty(false); setEditPickup(false)
-      doClosePanel()
-      fetch('/api/products').then(r => r.ok ? r.json() : products).then(setProducts)
-    } else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo cancelar') }
+    if (res.ok) { setActiveOrder(null); setEditPickup(false); closePanel(); await refreshProducts() }
+    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo cancelar') }
+    setBusy(false)
+  }
+  function openPickupEditor() {
+    setPickupDate(activeOrder?.pickupDate || '')
+    setPickupTime(activeOrder?.pickupTime || '')
+    setEditPickup(true)
+  }
+  async function chooseOrderTime(time: string) {
+    const ok = await orderPatch({ op: 'setPickup', pickupDate, pickupTime: time })
+    if (ok) setEditPickup(false)
   }
 
   // --- Carrito (antes del primer pedido) ---
   async function updateCartQuantity(itemId: number, quantity: number) {
-    const res = await fetch('/api/cart', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId, quantity }),
-    })
+    const res = await fetch('/api/cart', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId, quantity }) })
     if (res.ok) setCart(await res.json())
     else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo actualizar la cantidad') }
   }
   async function removeFromCart(itemId: number) {
-    const res = await fetch('/api/cart', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId }),
-    })
+    const res = await fetch('/api/cart', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId }) })
     if (res.ok) setCart(await res.json())
   }
   async function placeOrder() {
@@ -263,10 +186,9 @@ export default function StorePage() {
     })
     if (res.ok) {
       const data = await res.json()
-      setCart({ items: [] })
-      setNote(''); setPickupDate(''); setPickupTime('')
-      await refreshActiveOrder()
-      setOrderDone(data.orderId)
+      setCart({ items: [] }); setNote(''); setPickupDate(''); setPickupTime('')
+      setActiveOrder(data.order)
+      setOrderDone(true)
     } else {
       const err = await res.json().catch(() => ({}))
       alert(err.error || 'Error al realizar el pedido')
@@ -275,17 +197,13 @@ export default function StorePage() {
   }
 
   async function logout() {
-    guardedNav(async () => {
-      await fetch('/api/auth/logout', { method: 'POST' })
-      router.push('/')
-    })
+    guardedNav(async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/') })
   }
 
   const cartCount = cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
   const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * i.product.price, 0) ?? 0
-  const draftCount = draftItems.reduce((s, i) => s + i.quantity, 0)
-  const draftTotal = draftItems.reduce((s, i) => s + i.quantity * i.price, 0)
-  const badgeCount = activeOrder ? draftCount : cartCount
+  const orderCount = activeOrder?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
+  const badgeCount = activeOrder ? orderCount : cartCount
 
   if (loading) {
     return (
@@ -445,55 +363,52 @@ export default function StorePage() {
               <button onClick={closePanel} className="cursor-pointer" style={{ color: 'var(--muted)' }}>✕</button>
             </div>
 
-            {orderDone ? (
+            {orderDone && activeOrder ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(34,197,94,0.12)' }}>
                   <CheckCircle2 size={36} style={{ color: '#22c55e' }} />
                 </div>
                 <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--accent2)' }}>¡Pedido enviado!</h3>
-                <p className="text-sm mb-1" style={{ color: 'var(--muted)' }}>
-                  Tu pedido se ha recibido correctamente.
-                </p>
                 <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
-                  Puedes seguir añadiendo productos desde el catálogo. Recuerda <b>guardar</b> los cambios.
+                  Tu pedido se ha recibido. Puedes seguir añadiendo productos; recuerda <b>guardar</b> los cambios.
                 </p>
-                <button onClick={() => setOrderDone(null)}
+                <button onClick={() => setOrderDone(false)}
                         className="px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
                         style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
                   Ver mi pedido
                 </button>
               </div>
             ) : activeOrder ? (
-              /* ===== PEDIDO ABIERTO (borrador local) ===== */
+              /* ===== PEDIDO ABIERTO ===== */
               <>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {draftItems.length === 0 ? (
+                  {activeOrder.items.length === 0 ? (
                     <p className="text-center py-12 text-sm" style={{ color: 'var(--muted)' }}>
                       El pedido está vacío. Añade productos desde el catálogo.
                     </p>
-                  ) : draftItems.map((item, idx) => (
-                    <div key={idx} className="flex gap-3 p-3 rounded-xl"
+                  ) : activeOrder.items.map(item => (
+                    <div key={item.id} className="flex gap-3 p-3 rounded-xl"
                          style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{item.productName}</p>
                         {item.flavorName && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavorName}</p>}
                         <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.price).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
-                          <button onClick={() => draftSetQty(idx, item.quantity - 1)}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                          <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', itemId: item.id, quantity: item.quantity - 1 })}
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Minus size={14} />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
-                          <button onClick={() => draftSetQty(idx, item.quantity + 1)}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                          <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', itemId: item.id, quantity: item.quantity + 1 })}
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Plus size={14} />
                           </button>
                         </div>
                       </div>
-                      <button onClick={() => draftRemove(idx)}
-                              className="self-start p-2 rounded-lg cursor-pointer" style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>
+                      <button disabled={busy} onClick={() => orderPatch({ op: 'removeItem', itemId: item.id })}
+                              className="self-start p-2 rounded-lg cursor-pointer disabled:opacity-50" style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>
                         <Trash2 size={15} />
                       </button>
                     </div>
@@ -501,75 +416,68 @@ export default function StorePage() {
                 </div>
 
                 <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
-                  {/* Recogida editable (borrador) */}
                   <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--accent2)' }}>
                         <Clock size={13} /> Recogida
                       </span>
                       {!editPickup && (
-                        <button onClick={() => setEditPickup(true)} className="text-xs cursor-pointer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+                        <button onClick={openPickupEditor} className="text-xs cursor-pointer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
                           Cambiar
                         </button>
                       )}
                     </div>
                     {!editPickup ? (
                       <p className="text-sm" style={{ color: 'var(--accent)' }}>
-                        {draftDate ? `${formatDayLabel(new Date(draftDate + 'T00:00:00'))} a las ${draftTime}` : 'Sin definir'}
+                        {activeOrder.pickupDate ? `${formatDayLabel(new Date(activeOrder.pickupDate + 'T00:00:00'))} a las ${activeOrder.pickupTime}` : 'Sin definir'}
                       </p>
                     ) : (
                       <div className="space-y-2">
                         <div className="flex gap-1.5 overflow-x-auto pb-1">
                           {pickupDays.map(d => (
-                            <button key={d.value} onClick={() => { setDraftDate(d.value); setDraftTime('') }}
+                            <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
                               className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer capitalize"
                               style={{
-                                background: draftDate === d.value ? 'var(--accent2)' : 'var(--surface)',
-                                color: draftDate === d.value ? 'var(--bg)' : 'var(--accent)',
-                                border: `1px solid ${draftDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                                background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
+                                color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                                border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
                               }}>
                               {d.label}
                             </button>
                           ))}
                         </div>
-                        {draftDate && (
-                          draftSlots.length === 0 ? (
+                        {pickupDate && (
+                          timeSlots.length === 0 ? (
                             <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas ese día.</p>
                           ) : (
                             <div className="grid grid-cols-4 gap-1.5 max-h-28 overflow-y-auto">
-                              {draftSlots.map(t => (
-                                <button key={t} onClick={() => chooseDraftTime(t)}
-                                  className="px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
-                                  style={{
-                                    background: draftTime === t ? 'var(--accent2)' : 'var(--surface)',
-                                    color: draftTime === t ? 'var(--bg)' : 'var(--accent)',
-                                    border: `1px solid ${draftTime === t ? 'var(--accent2)' : 'var(--border)'}`,
-                                  }}>
+                              {timeSlots.map(t => (
+                                <button key={t} disabled={busy} onClick={() => chooseOrderTime(t)}
+                                  className="px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+                                  style={{ background: 'var(--surface)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
                                   {t}
                                 </button>
                               ))}
                             </div>
                           )
                         )}
-                        <button onClick={() => setEditPickup(false)} className="text-xs cursor-pointer" style={{ color: 'var(--muted)' }}>
-                          Cerrar
-                        </button>
+                        <button onClick={() => setEditPickup(false)} className="text-xs cursor-pointer" style={{ color: 'var(--muted)' }}>Cerrar</button>
                       </div>
                     )}
                   </div>
 
                   <div className="flex justify-between items-center">
                     <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
-                    <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{draftTotal.toFixed(2)} €</span>
+                    <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{activeOrder.total.toFixed(2)} €</span>
                   </div>
 
-                  <button onClick={saveOrder} disabled={!dirty || saving}
+                  <button onClick={orderConfirm} disabled={!dirty || busy}
                           className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 cursor-pointer"
                           style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                    {saving ? 'Guardando...' : dirty ? 'Guardar cambios' : 'Sin cambios'}
+                    {busy ? 'Guardando...' : dirty ? 'Guardar cambios' : 'Sin cambios'}
                   </button>
-                  <button onClick={orderCancel}
-                          className="w-full py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+                  <button onClick={orderCancel} disabled={busy}
+                          className="w-full py-2.5 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50"
                           style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
                     Cancelar pedido
                   </button>
@@ -577,7 +485,7 @@ export default function StorePage() {
                 </div>
               </>
             ) : (
-              /* ===== CARRITO (antes del primer pedido) ===== */
+              /* ===== CARRITO ===== */
               <>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {!cart?.items.length ? (
