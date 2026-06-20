@@ -149,11 +149,16 @@ export default function StorePage() {
       const product = products.find(p => p.id === productId)
       if (!product) return
       const flavor = flavorId ? product.flavors.find(f => f.id === flavorId) : null
-      const existing = draftItems.find(i => i.productId === productId && i.flavorId === flavorId)
-      const newQty = (existing?.quantity ?? 0) + 1
-      if (flavor && newQty > flavor.stock) { alert('No hay más unidades disponibles de este sabor.'); return }
+      // Comprobación de stock (orientativa; el servidor valida al guardar)
+      const currentQty = draftItems.find(i => i.productId === productId && i.flavorId === flavorId)?.quantity ?? 0
+      if (flavor && currentQty + 1 > flavor.stock) { alert('No hay más unidades disponibles de este sabor.'); return }
       setDraftItems(prev => {
-        if (existing) return prev.map(i => i === existing ? { ...i, quantity: newQty } : i)
+        const idx = prev.findIndex(i => i.productId === productId && i.flavorId === flavorId)
+        if (idx >= 0) {
+          const copy = [...prev]
+          copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 }
+          return copy
+        }
         return [...prev, { productId, flavorId, productName: product.name, flavorName: flavor?.name ?? null, price: product.price, quantity: 1 }]
       })
       setDirty(true)
@@ -173,17 +178,19 @@ export default function StorePage() {
   }
 
   // --- Borrador del pedido abierto (local) ---
-  function draftSetQty(item: DraftItem, newQty: number) {
+  function draftSetQty(idx: number, newQty: number) {
+    const item = draftItems[idx]
+    if (!item) return
     const q = Math.max(0, newQty)
     if (q > item.quantity) {
       const stock = flavorStock(item.productId, item.flavorId)
       if (stock !== null && q > stock) { alert('No hay más unidades disponibles de este sabor.'); return }
     }
-    setDraftItems(prev => prev.flatMap(i => i === item ? (q <= 0 ? [] : [{ ...i, quantity: q }]) : [i]))
+    setDraftItems(prev => prev.flatMap((i, n) => n === idx ? (q <= 0 ? [] : [{ ...i, quantity: q }]) : [i]))
     setDirty(true)
   }
-  function draftRemove(item: DraftItem) {
-    setDraftItems(prev => prev.filter(i => i !== item))
+  function draftRemove(idx: number) {
+    setDraftItems(prev => prev.filter((_, n) => n !== idx))
     setDirty(true)
   }
   function chooseDraftTime(time: string) {
@@ -472,20 +479,20 @@ export default function StorePage() {
                         {item.flavorName && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavorName}</p>}
                         <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.price).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
-                          <button onClick={() => draftSetQty(item, item.quantity - 1)}
+                          <button onClick={() => draftSetQty(idx, item.quantity - 1)}
                                   className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Minus size={14} />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
-                          <button onClick={() => draftSetQty(item, item.quantity + 1)}
+                          <button onClick={() => draftSetQty(idx, item.quantity + 1)}
                                   className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Plus size={14} />
                           </button>
                         </div>
                       </div>
-                      <button onClick={() => draftRemove(item)}
+                      <button onClick={() => draftRemove(idx)}
                               className="self-start p-2 rounded-lg cursor-pointer" style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>
                         <Trash2 size={15} />
                       </button>
