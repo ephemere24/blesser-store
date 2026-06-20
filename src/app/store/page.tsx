@@ -59,15 +59,16 @@ export default function StorePage() {
 
   function loadAll() {
     return Promise.all([
-      fetch('/api/products').then(r => { if (r.status === 401) { router.push('/'); return [] } return r.json() }),
-      fetch('/api/cart').then(r => r.status === 401 ? null : r.json()),
-      fetch('/api/orders').then(r => r.status === 401 ? [] : r.json()),
+      fetch('/api/products').then(r => { if (r.status === 401) { router.push('/'); return [] } return r.ok ? r.json() : [] }).catch(() => []),
+      fetch('/api/cart').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/orders').then(r => r.ok ? r.json() : []).catch(() => []),
     ]).then(([prods, cartData, orders]) => {
-      setProducts(prods || [])
+      setProducts(Array.isArray(prods) ? prods : [])
       setCart(cartData)
-      setActiveOrder((orders || []).find((o: Order) => o.status === 'pending') || null)
+      const list = Array.isArray(orders) ? orders : []
+      setActiveOrder(list.find((o: Order) => o.status === 'pending') || null)
       setLoading(false)
-    })
+    }).catch(() => setLoading(false))
   }
 
   useEffect(() => { loadAll() }, [router])
