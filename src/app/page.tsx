@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { gsap } from 'gsap'
+import { Check } from 'lucide-react'
 
 export default function LoginPage() {
   const [code, setCode] = useState('')
@@ -147,11 +148,23 @@ export default function LoginPage() {
             <p className="text-center text-sm" style={{ color: 'var(--danger)' }}>{error}</p>
           )}
 
-          <label className="flex items-center justify-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
-                   className="w-4 h-4 cursor-pointer" style={{ accentColor: 'var(--accent2)' }} />
-            <span className="text-sm" style={{ color: 'var(--muted)' }}>Recordar mi código en este dispositivo</span>
-          </label>
+          <button type="button" onClick={() => setRemember(r => !r)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer select-none transition-all"
+                  style={{
+                    background: remember ? 'rgba(255,255,255,0.06)' : 'var(--surface2)',
+                    border: `1px solid ${remember ? 'var(--accent2)' : 'var(--border)'}`,
+                  }}>
+            <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all"
+                  style={{
+                    background: remember ? 'var(--accent2)' : 'transparent',
+                    border: `2px solid ${remember ? 'var(--accent2)' : 'var(--muted)'}`,
+                  }}>
+              {remember && <Check size={14} strokeWidth={3} style={{ color: 'var(--bg)' }} />}
+            </span>
+            <span className="text-sm font-medium" style={{ color: remember ? 'var(--accent2)' : 'var(--muted)' }}>
+              Recordar mi código en este dispositivo
+            </span>
+          </button>
 
           <button
             type="submit"
