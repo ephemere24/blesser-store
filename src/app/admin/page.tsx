@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, ClipboardList } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays } from 'lucide-react'
+import AgendaTab from './AgendaTab'
 
 interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
@@ -159,7 +160,7 @@ export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
-  const [tab, setTab] = useState<'products' | 'codes'>('products')
+  const [tab, setTab] = useState<'agenda' | 'products' | 'codes'>('agenda')
   const [products, setProducts] = useState<Product[]>([])
   const [codes, setCodes] = useState<AccessCode[]>([])
   const [modal, setModal] = useState<{ open: boolean; product: typeof emptyProduct & { id?: number } }>({
@@ -323,26 +324,21 @@ export default function AdminPage() {
           </div>
           <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>Admin Panel</span>
         </div>
-        <div className="flex items-center gap-2">
-          <a href="/admin/pedidos" className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl"
-             style={{ color: 'var(--accent2)', background: 'var(--surface2)' }}>
-            <ClipboardList size={14} /> Pedidos
-          </a>
-          <button onClick={logout} className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl"
-                  style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
-            <LogOut size={14} /> Salir
-          </button>
-        </div>
+        <button onClick={logout} className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl"
+                style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
+          <LogOut size={14} /> Salir
+        </button>
       </header>
 
       {/* Tabs */}
       <div className="px-4 pt-4">
         <div className="flex gap-2 mb-6">
           {[
+            { key: 'agenda', label: 'Agenda', icon: CalendarDays },
             { key: 'products', label: 'Productos', icon: Package },
             { key: 'codes', label: 'Códigos', icon: Users },
           ].map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key as 'products' | 'codes')}
+            <button key={key} onClick={() => setTab(key as 'agenda' | 'products' | 'codes')}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
               style={{
                 background: tab === key ? 'var(--accent2)' : 'var(--surface2)',
@@ -353,6 +349,9 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
+
+        {/* AGENDA */}
+        {tab === 'agenda' && <AgendaTab />}
 
         {/* PRODUCTOS */}
         {tab === 'products' && (

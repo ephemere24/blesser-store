@@ -9,7 +9,8 @@ interface OrderItem { id: number; productId: number | null; flavorId: number | n
 interface Order {
   id: number; total: number; status: string; note: string | null; createdAt: string
   pickupDate: string | null; pickupTime: string | null
-  items: OrderItem[]; accessCode: { code: string; clientName: string | null }
+  customerName: string | null; customerPhone: string | null
+  items: OrderItem[]; accessCode: { code: string; clientName: string | null } | null
 }
 interface PFlavor { id: number; name: string; stock: number }
 interface PProduct { id: number; name: string; price: number; flavors: PFlavor[] }
@@ -149,7 +150,7 @@ export default function AdminOrdersPage() {
                     </span>
                   </div>
                   <p className="text-sm mt-1 font-medium" style={{ color: 'var(--accent)' }}>
-                    {order.accessCode.clientName || 'Sin nombre'} · <span className="font-mono">{order.accessCode.code}</span>
+                    {order.customerName || order.accessCode?.clientName || 'Sin nombre'}{order.accessCode ? <> · <span className="font-mono">{order.accessCode.code}</span></> : order.customerPhone ? ` · ${order.customerPhone}` : ''}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
                     {new Date(order.createdAt).toLocaleString('es-ES')}

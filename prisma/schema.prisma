@@ -78,12 +78,15 @@ model CartItem {
 }
 
 model Order {
-  id           Int         @id @default(autoincrement())
-  accessCode   AccessCode  @relation(fields: [accessCodeId], references: [id])
-  accessCodeId Int
-  items        OrderItem[]
-  total        Float
-  status       String      @default("pending")
+  id            Int         @id @default(autoincrement())
+  accessCode    AccessCode? @relation(fields: [accessCodeId], references: [id])
+  accessCodeId  Int?
+  customerName  String?
+  customerPhone String?
+  manual        Boolean     @default(false)
+  items         OrderItem[]
+  total         Float
+  status        String      @default("pending")
   note           String?
   pickupDate     String?
   pickupTime     String?
