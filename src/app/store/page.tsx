@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar } from 'lucide-react'
+import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
@@ -41,6 +41,7 @@ export default function StorePage() {
   const [pickupTime, setPickupTime] = useState('')
   const [editPickup, setEditPickup] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [cartStep, setCartStep] = useState<'items' | 'pickup'>('items')
   const router = useRouter()
 
   const pickupDays = useMemo(() => getPickupDays(), [])
@@ -187,7 +188,7 @@ export default function StorePage() {
     })
     if (res.ok) {
       const data = await res.json()
-      setCart({ items: [] }); setNote(''); setPickupDate(''); setPickupTime('')
+      setCart({ items: [] }); setNote(''); setPickupDate(''); setPickupTime(''); setCartStep('items')
       setActiveOrder(data.order)
       setOrderDone(true)
     } else {
@@ -235,7 +236,7 @@ export default function StorePage() {
             <Package size={16} />
             <span className="hidden sm:inline">Historial</span>
           </button>
-          <button onClick={() => setPanelOpen(true)}
+          <button onClick={() => { setCartStep('items'); setPanelOpen(true) }}
                   className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
             <ShoppingCart size={16} />
@@ -485,8 +486,77 @@ export default function StorePage() {
                   <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>Pago en efectivo al recoger</p>
                 </div>
               </>
+            ) : cartStep === 'pickup' ? (
+              /* ===== CARRITO · PASO 2: recogida ===== */
+              <>
+                <button onClick={() => setCartStep('items')}
+                        className="flex items-center gap-1.5 px-4 pt-3 text-sm cursor-pointer self-start" style={{ color: 'var(--muted)' }}>
+                  <ChevronLeft size={16} /> Artículos
+                </button>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} style={{ color: 'var(--accent2)' }} />
+                      <span className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>Recogida · L-S de 14:00 a 21:00</span>
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Calendar size={12} /> Día</p>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1">
+                        {pickupDays.map(d => (
+                          <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
+                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer capitalize transition-all"
+                            style={{
+                              background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
+                              color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                              border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                            }}>
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {pickupDate && (
+                      <div>
+                        <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Clock size={12} /> Hora</p>
+                        {timeSlots.length === 0 ? (
+                          <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas disponibles hoy, elige otro día.</p>
+                        ) : (
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {timeSlots.map(t => (
+                              <button key={t} onClick={() => setPickupTime(t)}
+                                className="px-2 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all"
+                                style={{
+                                  background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
+                                  color: pickupTime === t ? 'var(--bg)' : 'var(--accent)',
+                                  border: `1px solid ${pickupTime === t ? 'var(--accent2)' : 'var(--border)'}`,
+                                }}>
+                                {t}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Nota para el pedido (opcional)" rows={2}
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none resize-none"
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} />
+                </div>
+                <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
+                    <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{cartTotal.toFixed(2)} €</span>
+                  </div>
+                  <button onClick={placeOrder} disabled={placing || !pickupDate || !pickupTime}
+                          className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 cursor-pointer"
+                          style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                    {placing ? 'Enviando pedido...' : !pickupDate || !pickupTime ? 'Elige día y hora de recogida' : 'Realizar pedido'}
+                  </button>
+                  <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>Pago en efectivo al recoger</p>
+                </div>
+              </>
             ) : (
-              /* ===== CARRITO ===== */
+              /* ===== CARRITO · PASO 1: artículos ===== */
               <>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {!cart?.items.length ? (
@@ -503,15 +573,15 @@ export default function StorePage() {
                         <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.product.price).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
                           <button onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                            <Minus size={14} />
+                            <Minus size={15} />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
                           <button onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                            <Plus size={14} />
+                            <Plus size={15} />
                           </button>
                         </div>
                       </div>
@@ -524,63 +594,15 @@ export default function StorePage() {
                 </div>
                 {cartCount > 0 && (
                   <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
-                    <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                      <div className="flex items-center gap-2">
-                        <Clock size={14} style={{ color: 'var(--accent2)' }} />
-                        <span className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>Recogida · L-S de 14:00 a 21:00</span>
-                      </div>
-                      <div>
-                        <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Calendar size={12} /> Día</p>
-                        <div className="flex gap-1.5 overflow-x-auto pb-1">
-                          {pickupDays.map(d => (
-                            <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
-                              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer capitalize transition-all"
-                              style={{
-                                background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
-                                color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
-                                border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
-                              }}>
-                              {d.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {pickupDate && (
-                        <div>
-                          <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Clock size={12} /> Hora</p>
-                          {timeSlots.length === 0 ? (
-                            <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas disponibles hoy, elige otro día.</p>
-                          ) : (
-                            <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto">
-                              {timeSlots.map(t => (
-                                <button key={t} onClick={() => setPickupTime(t)}
-                                  className="px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
-                                  style={{
-                                    background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
-                                    color: pickupTime === t ? 'var(--bg)' : 'var(--accent)',
-                                    border: `1px solid ${pickupTime === t ? 'var(--accent2)' : 'var(--border)'}`,
-                                  }}>
-                                  {t}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Nota para el pedido (opcional)" rows={2}
-                      className="w-full px-3 py-2 rounded-xl text-sm outline-none resize-none"
-                      style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} />
                     <div className="flex justify-between items-center">
                       <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
                       <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{cartTotal.toFixed(2)} €</span>
                     </div>
-                    <button onClick={placeOrder} disabled={placing || !pickupDate || !pickupTime}
-                            className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 cursor-pointer"
+                    <button onClick={() => setCartStep('pickup')}
+                            className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2"
                             style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                      {placing ? 'Enviando pedido...' : !pickupDate || !pickupTime ? 'Elige día y hora de recogida' : 'Realizar pedido'}
+                      Continuar a recogida <ChevronRight size={16} />
                     </button>
-                    <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>Pago en efectivo al recoger</p>
                   </div>
                 )}
               </>
