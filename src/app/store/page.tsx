@@ -39,7 +39,6 @@ export default function StorePage() {
   const [orderDone, setOrderDone] = useState(false)
   const [pickupDate, setPickupDate] = useState('')
   const [pickupTime, setPickupTime] = useState('')
-  const [editPickup, setEditPickup] = useState(false)
   const [busy, setBusy] = useState(false)
   const [cartStep, setCartStep] = useState<'items' | 'pickup'>('items')
   const router = useRouter()
@@ -155,18 +154,18 @@ export default function StorePage() {
     const res = await fetch(`/api/orders/${activeOrder!.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'cancel' }),
     })
-    if (res.ok) { setActiveOrder(null); setEditPickup(false); closePanel(); await refreshProducts() }
+    if (res.ok) { setActiveOrder(null); setCartStep('items'); closePanel(); await refreshProducts() }
     else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo cancelar') }
     setBusy(false)
   }
   function openPickupEditor() {
     setPickupDate(activeOrder?.pickupDate || '')
     setPickupTime(activeOrder?.pickupTime || '')
-    setEditPickup(true)
+    setCartStep('pickup')
   }
   async function chooseOrderTime(time: string) {
     const ok = await orderPatch({ op: 'setPickup', pickupDate, pickupTime: time })
-    if (ok) setEditPickup(false)
+    if (ok) setCartStep('items')
   }
 
   // --- Carrito (antes del primer pedido) ---
@@ -261,7 +260,7 @@ export default function StorePage() {
             <span className="text-sm" style={{ color: '#f59e0b' }}>
               Tienes un pedido abierto.{dirty ? ' Tienes cambios sin guardar.' : ' Lo que añadas se sumará a ese pedido.'}
             </span>
-            <button onClick={() => setPanelOpen(true)}
+            <button onClick={() => { setCartStep('items'); setPanelOpen(true) }}
                     className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold cursor-pointer"
                     style={{ background: '#f59e0b', color: 'var(--bg)' }}>
               {dirty ? 'Revisar y guardar' : 'Ver pedido'}
@@ -380,8 +379,69 @@ export default function StorePage() {
                   Ver mi pedido
                 </button>
               </div>
+            ) : activeOrder && cartStep === 'pickup' ? (
+              /* ===== PEDIDO ABIERTO · PASO 2: recogida ===== */
+              <>
+                <button onClick={() => setCartStep('items')}
+                        className="flex items-center gap-1.5 px-4 pt-3 text-sm cursor-pointer self-start" style={{ color: 'var(--muted)' }}>
+                  <ChevronLeft size={16} /> Pedido
+                </button>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} style={{ color: 'var(--accent2)' }} />
+                      <span className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>Recogida · L-S de 14:00 a 21:00</span>
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Calendar size={12} /> Día</p>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1">
+                        {pickupDays.map(d => (
+                          <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
+                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer capitalize transition-all"
+                            style={{
+                              background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
+                              color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                              border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                            }}>
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {pickupDate && (
+                      <div>
+                        <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Clock size={12} /> Hora</p>
+                        {timeSlots.length === 0 ? (
+                          <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas ese día.</p>
+                        ) : (
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {timeSlots.map(t => (
+                              <button key={t} disabled={busy} onClick={() => chooseOrderTime(t)}
+                                className="px-2 py-2 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50 transition-all"
+                                style={{
+                                  background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
+                                  color: pickupTime === t ? 'var(--bg)' : 'var(--accent)',
+                                  border: `1px solid ${pickupTime === t ? 'var(--accent2)' : 'var(--border)'}`,
+                                }}>
+                                {t}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
+                  <button onClick={() => setCartStep('items')}
+                          className="w-full py-3 rounded-xl font-semibold text-sm cursor-pointer"
+                          style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                    Listo
+                  </button>
+                </div>
+              </>
             ) : activeOrder ? (
-              /* ===== PEDIDO ABIERTO ===== */
+              /* ===== PEDIDO ABIERTO · PASO 1: artículos ===== */
               <>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {activeOrder.items.length === 0 ? (
@@ -397,15 +457,15 @@ export default function StorePage() {
                         <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.price).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
                           <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', itemId: item.id, quantity: item.quantity - 1 })}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                            <Minus size={14} />
+                            <Minus size={15} />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
                           <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', itemId: item.id, quantity: item.quantity + 1 })}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                            <Plus size={14} />
+                            <Plus size={15} />
                           </button>
                         </div>
                       </div>
@@ -418,55 +478,16 @@ export default function StorePage() {
                 </div>
 
                 <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
-                  <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--accent2)' }}>
-                        <Clock size={13} /> Recogida
-                      </span>
-                      {!editPickup && (
-                        <button onClick={openPickupEditor} className="text-xs cursor-pointer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
-                          Cambiar
-                        </button>
-                      )}
-                    </div>
-                    {!editPickup ? (
-                      <p className="text-sm" style={{ color: 'var(--accent)' }}>
-                        {activeOrder.pickupDate ? `${formatDayLabel(new Date(activeOrder.pickupDate + 'T00:00:00'))} a las ${activeOrder.pickupTime}` : 'Sin definir'}
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex gap-1.5 overflow-x-auto pb-1">
-                          {pickupDays.map(d => (
-                            <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
-                              className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer capitalize"
-                              style={{
-                                background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
-                                color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
-                                border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
-                              }}>
-                              {d.label}
-                            </button>
-                          ))}
-                        </div>
-                        {pickupDate && (
-                          timeSlots.length === 0 ? (
-                            <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas ese día.</p>
-                          ) : (
-                            <div className="grid grid-cols-4 gap-1.5 max-h-28 overflow-y-auto">
-                              {timeSlots.map(t => (
-                                <button key={t} disabled={busy} onClick={() => chooseOrderTime(t)}
-                                  className="px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
-                                  style={{ background: 'var(--surface)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
-                                  {t}
-                                </button>
-                              ))}
-                            </div>
-                          )
-                        )}
-                        <button onClick={() => setEditPickup(false)} className="text-xs cursor-pointer" style={{ color: 'var(--muted)' }}>Cerrar</button>
-                      </div>
-                    )}
-                  </div>
+                  {/* Resumen recogida -> paso 2 */}
+                  <button onClick={openPickupEditor}
+                          className="w-full flex items-center justify-between gap-2 rounded-xl p-3 cursor-pointer"
+                          style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                    <span className="flex items-center gap-2 text-sm" style={{ color: 'var(--accent)' }}>
+                      <Clock size={14} style={{ color: 'var(--accent2)' }} />
+                      {activeOrder.pickupDate ? `${formatDayLabel(new Date(activeOrder.pickupDate + 'T00:00:00'))} · ${activeOrder.pickupTime}` : 'Elige día y hora'}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }}>Cambiar <ChevronRight size={14} /></span>
+                  </button>
 
                   <div className="flex justify-between items-center">
                     <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
