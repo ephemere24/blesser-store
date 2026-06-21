@@ -270,21 +270,21 @@ function EditOrderModal({ order, products, onClose, onChanged }: { order: Order;
 
         <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
           <p className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>Añadir producto</p>
-          <div className="flex gap-2">
-            <select value={selProd ?? ''} onChange={e => { setSelProd(Number(e.target.value) || null); setSelFlavor(null) }}
-              className="flex-1 px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-              <option value="">Producto...</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <select value={selProd ?? ''} onChange={e => { setSelProd(Number(e.target.value) || null); setSelFlavor(null) }}
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+            <option value="">Producto...</option>
+            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {prod && prod.flavors.length > 0 && (
+            <select value={selFlavor ?? ''} onChange={e => setSelFlavor(Number(e.target.value) || null)}
+              className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+              <option value="">Sabor...</option>
+              {prod.flavors.map(f => <option key={f.id} value={f.id} disabled={f.stock <= 0}>{f.name}{f.stock <= 0 ? ' (agotado)' : ` (${f.stock})`}</option>)}
             </select>
-            {prod && prod.flavors.length > 0 && (
-              <select value={selFlavor ?? ''} onChange={e => setSelFlavor(Number(e.target.value) || null)}
-                className="flex-1 px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                <option value="">Sabor...</option>
-                {prod.flavors.map(f => <option key={f.id} value={f.id} disabled={f.stock <= 0}>{f.name}{f.stock <= 0 ? ' (agotado)' : ` (${f.stock})`}</option>)}
-              </select>
-            )}
-            <button onClick={addItem} disabled={!prod || busy} className="px-3 rounded-lg cursor-pointer disabled:opacity-40" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}><Plus size={16} /></button>
-          </div>
+          )}
+          <button onClick={addItem} disabled={!prod || busy} className="w-full py-2.5 rounded-lg cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+            <Plus size={16} /> Añadir
+          </button>
         </div>
 
         <div className="flex items-center justify-between">
@@ -355,7 +355,7 @@ function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[];
           <button onClick={onClose} className="cursor-pointer" style={{ color: 'var(--muted)' }}><X size={18} /></button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del cliente *"
             className="px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
           <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Teléfono" type="tel"
@@ -365,23 +365,21 @@ function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[];
         {/* Añadir productos */}
         <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
           <p className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>Productos</p>
-          <div className="flex gap-2">
-            <select value={selProd ?? ''} onChange={e => { setSelProd(Number(e.target.value) || null); setSelFlavor(null) }}
-              className="flex-1 px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-              <option value="">Producto...</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.price}€)</option>)}
+          <select value={selProd ?? ''} onChange={e => { setSelProd(Number(e.target.value) || null); setSelFlavor(null) }}
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+            <option value="">Producto...</option>
+            {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.price}€)</option>)}
+          </select>
+          {prod && prod.flavors.length > 0 && (
+            <select value={selFlavor ?? ''} onChange={e => setSelFlavor(Number(e.target.value) || null)}
+              className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+              <option value="">Sabor...</option>
+              {prod.flavors.map(f => <option key={f.id} value={f.id} disabled={f.stock <= 0}>{f.name}{f.stock <= 0 ? ' (agotado)' : ` (${f.stock})`}</option>)}
             </select>
-            {prod && prod.flavors.length > 0 && (
-              <select value={selFlavor ?? ''} onChange={e => setSelFlavor(Number(e.target.value) || null)}
-                className="flex-1 px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
-                <option value="">Sabor...</option>
-                {prod.flavors.map(f => <option key={f.id} value={f.id} disabled={f.stock <= 0}>{f.name}{f.stock <= 0 ? ' (agotado)' : ` (${f.stock})`}</option>)}
-              </select>
-            )}
-            <button onClick={addLine} disabled={!prod} className="px-3 rounded-lg cursor-pointer disabled:opacity-40" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-              <Plus size={16} />
-            </button>
-          </div>
+          )}
+          <button onClick={addLine} disabled={!prod} className="w-full py-2.5 rounded-lg cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+            <Plus size={16} /> Añadir al pedido
+          </button>
           {lines.map((l, idx) => (
             <div key={idx} className="flex items-center gap-2 text-sm" style={{ color: 'var(--accent)' }}>
               <span className="flex-1 truncate">{l.productName}{l.flavorName ? ` — ${l.flavorName}` : ''}</span>
@@ -405,10 +403,10 @@ function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[];
             ))}
           </div>
           {pickupDate && (
-            <div className="grid grid-cols-5 gap-1.5 max-h-28 overflow-y-auto">
+            <div className="grid grid-cols-4 gap-1.5 max-h-28 overflow-y-auto">
               {slots.map(t => (
                 <button key={t} onClick={() => setPickupTime(t)}
-                  className="px-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                  className="px-1 py-2 rounded-lg text-xs font-medium cursor-pointer"
                   style={{ background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)', color: pickupTime === t ? 'var(--bg)' : 'var(--accent)', border: '1px solid var(--border)' }}>
                   {t}
                 </button>
