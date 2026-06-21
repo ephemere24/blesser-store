@@ -14,7 +14,7 @@ type ClientOp =
   | { op: 'cancel' }
 
 function withItems(orderId: number) {
-  return prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
+  return prisma.order.findUnique({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } } } })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

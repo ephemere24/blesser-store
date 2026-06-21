@@ -149,6 +149,13 @@ export default function AgendaTab() {
                 </div>
 
                 <div className="flex gap-2 mt-3">
+                  {o.status !== 'pending' && (
+                    <button onClick={() => setStatus(o.id, o.status === 'completed' ? 'ready' : 'pending')}
+                            className="px-3 py-2 rounded-xl cursor-pointer flex items-center justify-center shrink-0"
+                            style={{ background: 'var(--surface2)', color: 'var(--muted)' }} title="Retroceder estado">
+                      <Undo2 size={16} />
+                    </button>
+                  )}
                   {o.status === 'pending' && (
                     <button onClick={() => setStatus(o.id, 'ready')} className="flex-1 py-2 rounded-xl text-sm font-semibold cursor-pointer"
                             style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}>
@@ -157,16 +164,16 @@ export default function AgendaTab() {
                   )}
                   {o.status === 'ready' && (
                     <button onClick={() => setStatus(o.id, 'completed')} className="flex-1 py-2 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-1.5"
-                            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
+                            style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
                       <CheckCircle2 size={15} /> Entregar
                     </button>
                   )}
                   {o.status === 'completed' && (
-                    <div className="flex-1 py-2 rounded-xl text-sm font-semibold text-center" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                    <div className="flex-1 py-2 rounded-xl text-sm font-semibold text-center" style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
                       ✓ Entregado
                     </div>
                   )}
-                  <button onClick={() => setDetails(o)} className="px-4 py-2 rounded-xl text-sm font-medium cursor-pointer"
+                  <button onClick={() => setDetails(o)} className="px-4 py-2 rounded-xl text-sm font-medium cursor-pointer shrink-0"
                           style={{ background: 'var(--surface2)', color: 'var(--accent2)' }}>
                     Detalles
                   </button>
@@ -235,7 +242,7 @@ export default function AgendaTab() {
                 {o.status === 'ready' && (
                   <div className="flex gap-2">
                     <button onClick={() => act(() => setStatus(o.id, 'pending'))} className="px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer flex items-center gap-1" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}><Undo2 size={14} /></button>
-                    <button onClick={() => act(() => setStatus(o.id, 'completed'))} className="flex-1 py-2.5 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-1.5" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}><CheckCircle2 size={15} /> Entregar</button>
+                    <button onClick={() => act(() => setStatus(o.id, 'completed'))} className="flex-1 py-2.5 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-1.5" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}><CheckCircle2 size={15} /> Entregar</button>
                   </div>
                 )}
                 {o.status === 'completed' && (

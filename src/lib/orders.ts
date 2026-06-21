@@ -25,7 +25,7 @@ async function recalcAndGet(orderId: number) {
   await prisma.order.update({ where: { id: orderId }, data: { total } })
   return prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true, accessCode: true },
+    include: { items: { orderBy: { id: 'asc' } }, accessCode: true },
   })
 }
 
@@ -181,7 +181,7 @@ export async function confirmOrderDraft(orderId: number) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
   if (!order) throw new OrderEditError('Pedido no encontrado', 404)
   const draft = (order.draftItems as unknown as DraftLine[] | null) ?? null
-  if (!draft) return prisma.order.findUnique({ where: { id: orderId }, include: { items: true, accessCode: true } })
+  if (!draft) return prisma.order.findUnique({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } }, accessCode: true } })
 
   const desired: DesiredItem[] = draft.map(d => ({ productId: d.productId, flavorId: d.flavorId, quantity: d.quantity }))
   const pickupDate = order.draftPickupDate ?? order.pickupDate ?? undefined
@@ -192,7 +192,7 @@ export async function confirmOrderDraft(orderId: number) {
     where: { id: orderId },
     data: { draftItems: Prisma.DbNull, draftPickupDate: null, draftPickupTime: null, pendingChanges: false },
   })
-  return prisma.order.findUnique({ where: { id: orderId }, include: { items: true, accessCode: true } })
+  return prisma.order.findUnique({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } }, accessCode: true } })
 }
 
 /**
@@ -276,5 +276,5 @@ export async function applyOrderSave(
     })
   })
 
-  return prisma.order.findUnique({ where: { id: orderId }, include: { items: true, accessCode: true } })
+  return prisma.order.findUnique({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } }, accessCode: true } })
 }

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: 'desc' },
-    include: { items: true, accessCode: true },
+    include: { items: { orderBy: { id: 'asc' } }, accessCode: true },
   })
   return NextResponse.json(orders)
 }
