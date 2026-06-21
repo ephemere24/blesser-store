@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Plus, Minus, X, Phone, MessageCircle, RefreshCw, Clock, CheckCircle2, Package } from 'lucide-react'
+import { Plus, Minus, X, Phone, MessageCircle, RefreshCw, Clock, CheckCircle2, Package, Undo2, Pencil, Trash2 } from 'lucide-react'
 import { getPickupDays, getTimeSlots, formatDayLabel, dateToValue } from '@/lib/pickup'
 
 interface OItem { id: number; productName: string; flavorName: string | null; price: number; quantity: number }
@@ -35,6 +35,7 @@ export default function AgendaTab() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'today' | 'tomorrow' | 'all'>('today')
   const [showNew, setShowNew] = useState(false)
+  const [editing, setEditing] = useState<Order | null>(null)
   const pausePoll = useRef(false)
 
   const load = useCallback(async () => {
@@ -53,7 +54,7 @@ export default function AgendaTab() {
     return () => clearInterval(t)
   }, [load])
 
-  useEffect(() => { pausePoll.current = showNew }, [showNew])
+  useEffect(() => { pausePoll.current = showNew || editing !== null }, [showNew, editing])
 
   async function setStatus(id: number, status: string) {
     await fetch('/api/admin/orders', {
@@ -68,14 +69,6 @@ export default function AgendaTab() {
     })
     load()
   }
-  async function removeOrder(id: number) {
-    if (!confirm('¿Eliminar este pedido de la agenda?')) return
-    await fetch('/api/admin/orders', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
-    })
-    load()
-  }
-
   const today = dateToValue(new Date())
   const tomorrowD = new Date(); tomorrowD.setDate(tomorrowD.getDate() + 1)
   const tomorrow = dateToValue(tomorrowD)
@@ -179,32 +172,41 @@ export default function AgendaTab() {
                 {/* Acciones */}
                 <div className="flex gap-2 p-3 pt-0 flex-wrap">
                   {o.status === 'pending' && (
-                    <button onClick={() => setStatus(o.id, 'ready')} className="flex-1 min-w-[120px] py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+                    <button onClick={() => setStatus(o.id, 'ready')} className="flex-1 min-w-[130px] py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
                             style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}>
                       Marcar preparado
                     </button>
                   )}
                   {o.status === 'ready' && (
-                    <button onClick={() => setStatus(o.id, 'completed')} className="flex-1 min-w-[120px] py-2.5 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-1.5"
-                            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
-                      <CheckCircle2 size={15} /> Entregar
-                    </button>
+                    <>
+                      <button onClick={() => setStatus(o.id, 'pending')} className="px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer flex items-center gap-1"
+                              style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                        <Undo2 size={14} />
+                      </button>
+                      <button onClick={() => setStatus(o.id, 'completed')} className="flex-1 min-w-[120px] py-2.5 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-1.5"
+                              style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
+                        <CheckCircle2 size={15} /> Entregar
+                      </button>
+                    </>
                   )}
                   {o.status === 'completed' && (
-                    <button onClick={() => setStatus(o.id, 'ready')} className="flex-1 min-w-[120px] py-2.5 rounded-xl text-sm font-medium cursor-pointer"
+                    <button onClick={() => setStatus(o.id, 'ready')} className="flex-1 min-w-[130px] py-2.5 rounded-xl text-sm font-medium cursor-pointer flex items-center justify-center gap-1.5"
                             style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                      Deshacer entrega
+                      <Undo2 size={14} /> Deshacer entrega
                     </button>
                   )}
                   {o.status !== 'completed' && (
-                    <button onClick={() => cancelOrder(o.id)} className="px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer"
-                            style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
-                      Cancelar
-                    </button>
+                    <>
+                      <button onClick={() => setEditing(o)} className="px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer flex items-center gap-1.5"
+                              style={{ background: 'var(--surface2)', color: 'var(--accent2)' }}>
+                        <Pencil size={14} /> Editar
+                      </button>
+                      <button onClick={() => cancelOrder(o.id)} className="px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer"
+                              style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
+                        Cancelar
+                      </button>
+                    </>
                   )}
-                  <button onClick={() => removeOrder(o.id)} className="px-3 py-2.5 rounded-xl cursor-pointer" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                    <X size={15} />
-                  </button>
                 </div>
               </div>
             )
@@ -213,6 +215,84 @@ export default function AgendaTab() {
       )}
 
       {showNew && <NewOrderModal products={products} onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />}
+      {editing && <EditOrderModal order={editing} products={products} onClose={() => setEditing(null)} onChanged={load} />}
+    </div>
+  )
+}
+
+function EditOrderModal({ order, products, onClose, onChanged }: { order: Order; products: PProduct[]; onClose: () => void; onChanged: () => void }) {
+  const [ord, setOrd] = useState<Order>(order)
+  const [selProd, setSelProd] = useState<number | null>(null)
+  const [selFlavor, setSelFlavor] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const prod = products.find(p => p.id === selProd)
+
+  async function patch(body: object) {
+    setBusy(true)
+    const res = await fetch(`/api/admin/orders/${ord.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (res.ok) { setOrd(await res.json()); onChanged() }
+    else { const err = await res.json().catch(() => ({})); alert(err.error || 'No se pudo modificar') }
+    setBusy(false)
+  }
+  function addItem() {
+    if (!prod) return
+    if (prod.flavors.length > 0 && !selFlavor) { alert('Elige un sabor'); return }
+    patch({ op: 'addItem', productId: prod.id, flavorId: selFlavor, quantity: 1 })
+    setSelFlavor(null)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-5 space-y-4"
+           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>Editar pedido</h3>
+          <button onClick={onClose} className="cursor-pointer" style={{ color: 'var(--muted)' }}><X size={18} /></button>
+        </div>
+
+        <div className="space-y-2">
+          {ord.items.map(it => (
+            <div key={it.id} className="flex items-center gap-2 p-2 rounded-xl" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+              <span className="flex-1 min-w-0 truncate text-sm" style={{ color: 'var(--accent2)' }}>{it.productName}{it.flavorName ? ` — ${it.flavorName}` : ''}</span>
+              <button disabled={busy} onClick={() => patch({ op: 'setQty', itemId: it.id, quantity: it.quantity - 1 })}
+                      className="w-7 h-7 rounded-md flex items-center justify-center cursor-pointer disabled:opacity-50" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}><Minus size={13} /></button>
+              <span className="w-5 text-center text-sm" style={{ color: 'var(--accent2)' }}>{it.quantity}</span>
+              <button disabled={busy} onClick={() => patch({ op: 'setQty', itemId: it.id, quantity: it.quantity + 1 })}
+                      className="w-7 h-7 rounded-md flex items-center justify-center cursor-pointer disabled:opacity-50" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}><Plus size={13} /></button>
+              <button disabled={busy} onClick={() => patch({ op: 'removeItem', itemId: it.id })}
+                      className="p-1.5 rounded-md cursor-pointer disabled:opacity-50" style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+            </div>
+          ))}
+          {ord.items.length === 0 && <p className="text-sm text-center py-3" style={{ color: 'var(--muted)' }}>Sin productos</p>}
+        </div>
+
+        <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--accent2)' }}>Añadir producto</p>
+          <div className="flex gap-2">
+            <select value={selProd ?? ''} onChange={e => { setSelProd(Number(e.target.value) || null); setSelFlavor(null) }}
+              className="flex-1 px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+              <option value="">Producto...</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {prod && prod.flavors.length > 0 && (
+              <select value={selFlavor ?? ''} onChange={e => setSelFlavor(Number(e.target.value) || null)}
+                className="flex-1 px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+                <option value="">Sabor...</option>
+                {prod.flavors.map(f => <option key={f.id} value={f.id} disabled={f.stock <= 0}>{f.name}{f.stock <= 0 ? ' (agotado)' : ` (${f.stock})`}</option>)}
+              </select>
+            )}
+            <button onClick={addItem} disabled={!prod || busy} className="px-3 rounded-lg cursor-pointer disabled:opacity-40" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}><Plus size={16} /></button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
+          <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{ord.total.toFixed(2)} €</span>
+        </div>
+        <button onClick={onClose} className="w-full py-3 rounded-xl font-semibold text-sm cursor-pointer" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>Listo</button>
+      </div>
     </div>
   )
 }

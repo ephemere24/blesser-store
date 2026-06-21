@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { sendMessage } from '@/lib/telegram'
 import { formatDayLabel } from '@/lib/pickup'
@@ -163,6 +164,36 @@ export async function notifyOrderChange(order: OrderForNotify, clientLabel: stri
 }
 
 export type DesiredItem = { productId: number; flavorId: number | null; quantity: number }
+export type DraftLine = { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
+
+type OrderWithItems = { items: { productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }[] }
+
+// Borrador inicial = copia de las líneas reales del pedido
+export function draftFromOrder(order: OrderWithItems): DraftLine[] {
+  return order.items.map(i => ({
+    productId: i.productId!, flavorId: i.flavorId, productName: i.productName,
+    flavorName: i.flavorName, price: i.price, quantity: i.quantity,
+  }))
+}
+
+// Aplica el borrador al pedido real (ajusta stock y total) y limpia el borrador.
+export async function confirmOrderDraft(orderId: number) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
+  if (!order) throw new OrderEditError('Pedido no encontrado', 404)
+  const draft = (order.draftItems as unknown as DraftLine[] | null) ?? null
+  if (!draft) return prisma.order.findUnique({ where: { id: orderId }, include: { items: true, accessCode: true } })
+
+  const desired: DesiredItem[] = draft.map(d => ({ productId: d.productId, flavorId: d.flavorId, quantity: d.quantity }))
+  const pickupDate = order.draftPickupDate ?? order.pickupDate ?? undefined
+  const pickupTime = order.draftPickupTime ?? order.pickupTime ?? undefined
+  await applyOrderSave(orderId, desired, pickupDate && pickupTime ? { pickupDate, pickupTime } : undefined)
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { draftItems: Prisma.DbNull, draftPickupDate: null, draftPickupTime: null, pendingChanges: false },
+  })
+  return prisma.order.findUnique({ where: { id: orderId }, include: { items: true, accessCode: true } })
+}
 
 /**
  * Guarda el estado COMPLETO de un pedido de una sola vez (reconcilia stock y total).

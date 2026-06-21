@@ -91,6 +91,9 @@ model Order {
   pickupDate     String?
   pickupTime     String?
   pendingChanges Boolean   @default(false)
+  draftItems     Json?
+  draftPickupDate String?
+  draftPickupTime String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now()) @updatedAt
 }
