@@ -129,35 +129,35 @@ export default function HistorialTab() {
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      {/* KPIs — un panel con tres segmentos */}
+      <div className="grid grid-cols-3 rounded-2xl mb-4 overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
         {[
-          { label: 'Pedidos', value: filtered.length },
-          { label: 'Ingresos (entregados)', value: `${revenue.toFixed(2)} €` },
-          { label: 'Ticket medio', value: `${avgTicket.toFixed(2)} €` },
-        ].map(k => (
-          <div key={k.label} className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <p className="text-lg font-bold" style={{ color: 'var(--accent2)' }}>{k.value}</p>
-            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>{k.label}</p>
+          { label: 'Pedidos', value: String(filtered.length) },
+          { label: 'Ingresos', value: `${revenue.toFixed(2)}€` },
+          { label: 'Ticket medio', value: `${avgTicket.toFixed(2)}€` },
+        ].map((k, i) => (
+          <div key={k.label} className="px-3 py-3.5" style={{ borderLeft: i ? '1px solid var(--border)' : undefined }}>
+            <p className="text-base sm:text-xl font-bold tabular-nums leading-none" style={{ color: 'var(--accent2)' }}>{k.value}</p>
+            <p className="text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{k.label}</p>
           </div>
         ))}
       </div>
 
       {/* Filtros */}
-      <div className="space-y-2 mb-4">
+      <div className="space-y-2.5 mb-5">
         <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted)' }} />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.4)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente, teléfono o código"
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} />
+            className="w-full pl-10 pr-3 py-3 rounded-xl text-sm outline-none transition-colors focus:ring-2 focus:ring-white/15" style={inputStyle} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2.5">
           <select value={productId ?? ''} onChange={e => setProductId(Number(e.target.value) || null)}
-            className="px-3 py-2.5 rounded-xl text-sm outline-none truncate" style={inputStyle}>
+            className="px-3 py-3 rounded-xl text-sm outline-none truncate transition-colors focus:ring-2 focus:ring-white/15" style={inputStyle}>
             <option value="">Todos los productos</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select value={status} onChange={e => setStatus(e.target.value)}
-            className="px-3 py-2.5 rounded-xl text-sm outline-none" style={inputStyle}>
+            className="px-3 py-3 rounded-xl text-sm outline-none transition-colors focus:ring-2 focus:ring-white/15" style={inputStyle}>
             <option value="all">Todos los estados</option>
             <option value="pending">Pendiente</option>
             <option value="ready">Preparado</option>
@@ -165,17 +165,17 @@ export default function HistorialTab() {
             <option value="cancelled">Cancelado</option>
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} />
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} className="px-3 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} />
+        <div className="grid grid-cols-2 gap-2.5">
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-3 rounded-xl text-sm outline-none transition-colors focus:ring-2 focus:ring-white/15" style={inputStyle} />
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} className="px-3 py-3 rounded-xl text-sm outline-none transition-colors focus:ring-2 focus:ring-white/15" style={inputStyle} />
         </div>
         <div className="flex gap-2 flex-wrap">
           {([['Hoy', 0], ['7 días', 7], ['30 días', 30], ['Todo', 'all']] as const).map(([l, d]) => (
-            <button key={l} onClick={() => preset(d)} className="px-3 py-1 rounded-lg text-xs font-medium cursor-pointer" style={{ background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)' }}>{l}</button>
+            <button key={l} onClick={() => preset(d)} className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors hover:text-white" style={{ background: 'var(--surface2)', color: 'rgba(255,255,255,0.6)', border: '1px solid var(--border)' }}>{l}</button>
           ))}
           {(search || productId || status !== 'all' || from || to) && (
             <button onClick={() => { setSearch(''); setProductId(null); setStatus('all'); setFrom(''); setTo('') }}
-              className="px-3 py-1 rounded-lg text-xs font-medium cursor-pointer flex items-center gap-1" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
+              className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer flex items-center gap-1 transition-colors" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
               <X size={12} /> Limpiar
             </button>
           )}
@@ -208,19 +208,27 @@ export default function HistorialTab() {
         </div>
       ) : (
         <div className="space-y-5">
-          {groups.map(g => (
+          {groups.map(g => {
+            const dayTotal = g.items.reduce((s, o) => s + o.total, 0)
+            return (
             <div key={g.day}>
-              <p className="text-xs font-semibold uppercase mb-2 capitalize" style={{ color: 'var(--muted)' }}>
-                {formatDayLabel(new Date(g.day + 'T00:00:00'))} · {new Date(g.day + 'T00:00:00').getFullYear()}
-              </p>
+              <div className="flex items-baseline justify-between mb-2 px-0.5">
+                <p className="text-xs font-semibold capitalize" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {formatDayLabel(new Date(g.day + 'T00:00:00'))} · {new Date(g.day + 'T00:00:00').getFullYear()}
+                </p>
+                <p className="text-xs tabular-nums" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {g.items.length} · {dayTotal.toFixed(2)}€
+                </p>
+              </div>
               <div className="space-y-2">
                 {g.items.map(o => {
                   const st = STATUS[o.status] ?? STATUS.pending
                   const sel = selected.has(o.id)
                   return (
-                    <div key={o.id} className="rounded-2xl p-3 flex gap-3" style={{ background: 'var(--surface)', border: `1px solid ${sel ? 'var(--accent2)' : 'var(--border)'}` }}>
+                    <div key={o.id} className="rounded-2xl p-3.5 flex gap-3 transition-colors"
+                         style={{ background: 'var(--surface)', border: `1px solid ${sel ? 'var(--accent2)' : 'var(--border)'}` }}>
                       <button onClick={() => toggle(o.id)} className="shrink-0 mt-0.5 cursor-pointer">
-                        <span className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: sel ? 'var(--accent2)' : 'transparent', border: `2px solid ${sel ? 'var(--accent2)' : 'var(--muted)'}` }}>
+                        <span className="w-5 h-5 rounded-md flex items-center justify-center transition-colors" style={{ background: sel ? 'var(--accent2)' : 'transparent', border: `2px solid ${sel ? 'var(--accent2)' : 'rgba(255,255,255,0.35)'}` }}>
                           {sel && <Check size={13} strokeWidth={3} style={{ color: 'var(--bg)' }} />}
                         </span>
                       </button>
@@ -232,26 +240,27 @@ export default function HistorialTab() {
                           </div>
                           <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: `${st.color}22`, color: st.color }}>{st.label}</span>
                         </div>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
                           {new Date(o.createdAt).toLocaleString('es-ES')}
                           {o.pickupDate && o.pickupTime ? ` · recogida ${o.pickupTime}` : ''}
                         </p>
-                        <div className="mt-2 space-y-0.5">
+                        <div className="mt-2.5 space-y-1">
                           {o.items.map(it => (
-                            <p key={it.id} className="text-sm" style={{ color: 'var(--accent)' }}>
-                              <span className="font-semibold" style={{ color: 'var(--accent2)' }}>{it.quantity}×</span> {it.productName}{it.flavorName ? ` — ${it.flavorName}` : ''}
+                            <p key={it.id} className="text-sm leading-snug" style={{ color: 'var(--accent)' }}>
+                              <span className="font-semibold tabular-nums" style={{ color: 'var(--accent2)' }}>{it.quantity}×</span> {it.productName}{it.flavorName ? <span style={{ color: 'rgba(255,255,255,0.55)' }}> — {it.flavorName}</span> : ''}
                             </p>
                           ))}
                         </div>
-                        {o.note && <p className="text-xs mt-2 p-2 rounded-lg" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>📝 {o.note}</p>}
-                        <p className="text-sm font-bold mt-2" style={{ color: 'var(--accent2)' }}>{o.total.toFixed(2)} €</p>
+                        {o.note && <p className="text-xs mt-2.5 px-2.5 py-2 rounded-lg" style={{ background: 'var(--surface2)', color: 'rgba(255,255,255,0.6)' }}>📝 {o.note}</p>}
+                        <p className="text-base font-bold mt-2.5 tabular-nums" style={{ color: 'var(--accent2)' }}>{o.total.toFixed(2)} €</p>
                       </div>
                     </div>
                   )
                 })}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
