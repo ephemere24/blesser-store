@@ -37,6 +37,7 @@ export default function AgendaTab() {
   const [showNew, setShowNew] = useState(false)
   const [editing, setEditing] = useState<Order | null>(null)
   const [details, setDetails] = useState<Order | null>(null)
+  const [closures, setClosures] = useState<{ date: string; time: string | null }[]>([])
   const pausePoll = useRef(false)
 
   const load = useCallback(async () => {
@@ -48,6 +49,7 @@ export default function AgendaTab() {
   useEffect(() => {
     load()
     fetch('/api/admin/products').then(r => r.ok ? r.json() : []).then(setProducts)
+    fetch('/api/admin/closures').then(r => r.ok ? r.json() : []).then(setClosures)
   }, [load])
 
   useEffect(() => {
@@ -184,7 +186,7 @@ export default function AgendaTab() {
         </div>
       )}
 
-      {showNew && <NewOrderModal products={products} onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />}
+      {showNew && <NewOrderModal products={products} closures={closures} onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />}
       {editing && <EditOrderModal order={editing} products={products} onClose={() => setEditing(null)} onChanged={load} />}
 
       {details && (() => {
@@ -344,7 +346,7 @@ function EditOrderModal({ order, products, onClose, onChanged }: { order: Order;
   )
 }
 
-function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[]; onClose: () => void; onCreated: () => void }) {
+function NewOrderModal({ products, closures, onClose, onCreated }: { products: PProduct[]; closures: { date: string; time: string | null }[]; onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [note, setNote] = useState('')
@@ -358,6 +360,8 @@ function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[];
   const days = getPickupDays()
   const slots = pickupDate ? getTimeSlots(pickupDate) : []
   const prod = products.find(p => p.id === selProd)
+  const isDayClosed = (d: string) => closures.some(c => c.date === d && !c.time)
+  const isSlotClosed = (d: string, t: string) => closures.some(c => c.date === d && c.time === t)
 
   function addLine() {
     if (!prod) return
@@ -385,6 +389,9 @@ function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[];
     if (!name.trim()) { alert('Indica el nombre del cliente'); return }
     if (lines.length === 0) { alert('Añade al menos un producto'); return }
     if (!pickupDate || !pickupTime) { alert('Indica día y hora de recogida'); return }
+    // Advertencia si el día o la franja están cerrados en la agenda
+    if (isDayClosed(pickupDate)) { if (!confirm('⚠️ Ese DÍA está cerrado en la agenda. ¿Crear el pedido igualmente?')) return }
+    else if (isSlotClosed(pickupDate, pickupTime)) { if (!confirm('⚠️ Esa FRANJA horaria está cerrada en la agenda. ¿Crear el pedido igualmente?')) return }
     setSaving(true)
     const res = await fetch('/api/admin/orders/manual', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -446,23 +453,42 @@ function NewOrderModal({ products, onClose, onCreated }: { products: PProduct[];
         <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
           <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--accent2)' }}><Clock size={13} /> Recogida</p>
           <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {days.map(d => (
+            {days.map(d => {
+              const closed = isDayClosed(d.value)
+              return (
               <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
                 className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer capitalize"
-                style={{ background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)', color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)', border: '1px solid var(--border)' }}>
+                style={{
+                  background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
+                  color: pickupDate === d.value ? 'var(--bg)' : closed ? 'var(--danger)' : 'var(--accent)',
+                  border: `1px solid ${closed ? 'var(--danger)' : 'var(--border)'}`,
+                  textDecoration: closed ? 'line-through' : 'none',
+                }}>
                 {d.label}
               </button>
-            ))}
+              )
+            })}
           </div>
+          {pickupDate && isDayClosed(pickupDate) && (
+            <p className="text-xs" style={{ color: 'var(--danger)' }}>⚠️ Día cerrado en la agenda.</p>
+          )}
           {pickupDate && (
             <div className="grid grid-cols-4 gap-1.5 max-h-28 overflow-y-auto">
-              {slots.map(t => (
+              {slots.map(t => {
+                const closed = isSlotClosed(pickupDate, t)
+                return (
                 <button key={t} onClick={() => setPickupTime(t)}
                   className="px-1 py-2 rounded-lg text-xs font-medium cursor-pointer"
-                  style={{ background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)', color: pickupTime === t ? 'var(--bg)' : 'var(--accent)', border: '1px solid var(--border)' }}>
+                  style={{
+                    background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
+                    color: pickupTime === t ? 'var(--bg)' : closed ? 'var(--danger)' : 'var(--accent)',
+                    border: `1px solid ${closed ? 'var(--danger)' : 'var(--border)'}`,
+                    textDecoration: closed ? 'line-through' : 'none',
+                  }}>
                   {t}
                 </button>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
