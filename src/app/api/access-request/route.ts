@@ -7,55 +7,54 @@ export async function POST(req: NextRequest) {
   const { name, phone } = await req.json().catch(() => ({ name: '', phone: '' }))
 
   const cleanName = (name || '').trim()
-  const cleanPhone = (phone || '').trim()
+  // Normalizar teléfono: quitar espacios/guiones y prefijo +34/0034/34
+  const cleanPhone = (phone || '').replace(/[\s-]/g, '').replace(/^(\+34|0034|34)/, '')
 
-  if (cleanName.length < 2 || cleanPhone.length < 6) {
-    return NextResponse.json({ error: 'Introduce un nombre y un teléfono válidos' }, { status: 400 })
+  if (cleanName.length < 2) {
+    return NextResponse.json({ error: 'Introduce tu nombre' }, { status: 400 })
+  }
+  // Teléfono español válido: 9 dígitos empezando por 6, 7, 8 o 9
+  if (!/^[6-9]\d{8}$/.test(cleanPhone)) {
+    return NextResponse.json({ error: 'Introduce un número de teléfono válido (9 dígitos)' }, { status: 400 })
+  }
+
+  // Un teléfono solo puede tener un código de acceso
+  const existing = await prisma.accessCode.findFirst({ where: { phone: cleanPhone } })
+  if (existing) {
+    return NextResponse.json({ error: 'Este teléfono ya tiene acceso. Si has perdido tu código, contáctanos.' }, { status: 409 })
   }
 
   const request = await prisma.accessRequest.create({
     data: { name: cleanName, phone: cleanPhone },
   })
-
-  const existing = await prisma.accessCode.findFirst({ where: { phone: cleanPhone } })
   const autoAccept = (await getSetting('autoAcceptCodes')) === 'true'
 
   // --- Auto-aceptación: genera el código al instante ---
   if (autoAccept) {
     const code = await generateUniqueCode()
-    if (existing) {
-      await prisma.accessCode.update({ where: { id: existing.id }, data: { code, clientName: cleanName, active: true } })
-    } else {
-      await prisma.accessCode.create({ data: { code, clientName: cleanName, phone: cleanPhone } })
-    }
+    await prisma.accessCode.create({ data: { code, clientName: cleanName, phone: cleanPhone } })
     await prisma.accessRequest.update({ where: { id: request.id }, data: { status: 'approved', generatedCode: code } })
 
     await sendMessage(
       `✅ <b>Código generado automáticamente</b>\n\n` +
       `👤 Nombre: <b>${cleanName}</b>\n` +
       `📞 Teléfono: <b>${cleanPhone}</b>\n` +
-      `🔑 Código: <code>${code}</code>` +
-      (existing ? `\n\n(Se regeneró el código de un cliente existente)` : '')
+      `🔑 Código: <code>${code}</code>`
     )
 
     return NextResponse.json({ ok: true, autoAccepted: true, code })
   }
 
   // --- Flujo normal: solicitud con aprobación manual en Telegram ---
-  const message = existing
-    ? `🔁 <b>Solicitud de NUEVO código</b>\n\n` +
-      `Este teléfono ya tiene un código: <code>${existing.code}</code>\n\n` +
-      `👤 Nombre: <b>${cleanName}</b>\n` +
-      `📞 Teléfono: <b>${cleanPhone}</b>\n\n` +
-      `⚠️ Si aceptas, se le generará un código NUEVO y el anterior dejará de funcionar (no se crea otro usuario).`
-    : `🔑 <b>Nueva solicitud de acceso</b>\n\n` +
-      `👤 Nombre: <b>${cleanName}</b>\n` +
-      `📞 Teléfono: <b>${cleanPhone}</b>`
-
-  await sendMessage(message, [[
-    { text: existing ? '✅ Generar nuevo' : '✅ Aceptar', callback_data: `approve:${request.id}` },
-    { text: '❌ Rechazar', callback_data: `reject:${request.id}` },
-  ]])
+  await sendMessage(
+    `🔑 <b>Nueva solicitud de acceso</b>\n\n` +
+    `👤 Nombre: <b>${cleanName}</b>\n` +
+    `📞 Teléfono: <b>${cleanPhone}</b>`,
+    [[
+      { text: '✅ Aceptar', callback_data: `approve:${request.id}` },
+      { text: '❌ Rechazar', callback_data: `reject:${request.id}` },
+    ]]
+  )
 
   return NextResponse.json({ ok: true, autoAccepted: false })
 }
