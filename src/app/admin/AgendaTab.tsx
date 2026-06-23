@@ -116,7 +116,7 @@ export default function AgendaTab() {
 
       {/* Filtro principal */}
       <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-        {([['today', 'Hoy'], ['tomorrow', 'Mañana'], ['all', 'Todos'], ['delivered', 'Entregados']] as const).map(([k, l]) => (
+        {([['delivered', 'Entregados'], ['today', 'Hoy'], ['tomorrow', 'Mañana'], ['all', 'Todos']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
             className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-medium cursor-pointer"
             style={{
