@@ -139,18 +139,19 @@ export default function HorarioTab() {
           const state = dayState(d.date, d.isSunday)
           const disabled = d.isSunday || d.isPast
           const sel = selDay === d.date
-          const bg = sel ? 'var(--accent2)'
-            : state === 'full' ? 'rgba(239,68,68,0.18)'
+          // El color de estado (rojo/naranja) se mantiene aunque esté seleccionado.
+          const bg = state === 'full' ? 'rgba(239,68,68,0.18)'
             : state === 'partial' ? 'rgba(245,158,11,0.18)'
+            : sel ? 'var(--accent2)'
             : 'var(--surface2)'
-          const fg = sel ? 'var(--bg)'
-            : state === 'full' ? 'var(--danger)'
+          const fg = state === 'full' ? 'var(--danger)'
             : state === 'partial' ? '#f59e0b'
+            : sel ? 'var(--bg)'
             : disabled ? 'var(--muted)' : 'var(--accent)'
           return (
             <button key={d.date} disabled={disabled} onClick={() => selectDay(d.date)}
-              className="rounded-xl py-2 flex flex-col items-center cursor-pointer disabled:cursor-not-allowed"
-              style={{ background: bg, color: fg, border: `1px solid ${sel ? 'var(--accent2)' : 'var(--border)'}`, opacity: disabled ? 0.45 : 1 }}>
+              className="rounded-xl py-2 flex flex-col items-center cursor-pointer disabled:cursor-not-allowed transition-all"
+              style={{ background: bg, color: fg, border: `2px solid ${sel ? 'var(--accent2)' : 'transparent'}`, opacity: disabled ? 0.45 : 1 }}>
               <span className="text-[10px] uppercase">{d.dow}</span>
               <span className="text-base font-bold leading-tight">{d.num}</span>
               <span className="text-[9px] leading-none mt-0.5">
@@ -164,7 +165,8 @@ export default function HorarioTab() {
       {/* Submenú de franjas del día seleccionado */}
       {selDay && (
         <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <button type="button" onClick={() => toggleWholeDay(selDay)} className="flex items-center gap-2 cursor-pointer select-none w-full">
+          <button type="button" onClick={() => toggleWholeDay(selDay)} className="flex items-center gap-2 cursor-pointer select-none w-full rounded-xl p-2 transition-all active:scale-[0.98]"
+                  style={{ background: selWholeClosed ? 'rgba(239,68,68,0.1)' : 'var(--surface2)', border: '1px solid var(--border)' }}>
             <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
                   style={{ background: selWholeClosed ? 'var(--danger)' : 'transparent', border: `2px solid ${selWholeClosed ? 'var(--danger)' : 'var(--muted)'}` }}>
               {selWholeClosed && <Check size={13} strokeWidth={3} style={{ color: 'var(--bg)' }} />}

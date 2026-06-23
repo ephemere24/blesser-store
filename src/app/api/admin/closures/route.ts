@@ -22,11 +22,12 @@ export async function POST(req: NextRequest) {
   if (!time) {
     await prisma.closure.deleteMany({ where: { date, time: { not: null } } })
   }
-  const closure = await prisma.closure.upsert({
-    where: { date_time: { date, time: time ?? null } },
-    update: {},
-    create: { date, time: time ?? null },
-  })
+
+  // No usamos upsert: Prisma no resuelve bien el unique compuesto con time=null
+  const existing = await prisma.closure.findFirst({ where: { date, time: time ?? null } })
+  if (existing) return NextResponse.json(existing)
+
+  const closure = await prisma.closure.create({ data: { date, time: time ?? null } })
   return NextResponse.json(closure)
 }
 
