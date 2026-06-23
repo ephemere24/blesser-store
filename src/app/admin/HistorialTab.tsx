@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Package, RefreshCw, Search, Trash2, Download, X, Check, ShoppingBag, Euro, Receipt } from 'lucide-react'
+import { Package, RefreshCw, Search, Trash2, Download, X, Check, ShoppingBag, Euro, Receipt, Calendar } from 'lucide-react'
 import { formatDayLabel } from '@/lib/pickup'
 
 interface OItem { id: number; productId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
@@ -168,9 +168,22 @@ export default function HistorialTab() {
             <option value="cancelled">Cancelado</option>
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={`${inputBase} px-3 py-3`} style={inputStyle} />
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} className={`${inputBase} px-3 py-3`} style={inputStyle} />
+        <div>
+          <p className="text-[11px] mb-1.5 flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            <Calendar size={12} /> Rango de fechas
+          </p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] pl-1" style={{ color: 'rgba(255,255,255,0.5)' }}>Desde</span>
+              <input type="date" value={from} max={to || undefined} onChange={e => setFrom(e.target.value)}
+                className={`${inputBase} px-3 py-3`} style={{ ...inputStyle, colorScheme: 'dark' }} />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] pl-1" style={{ color: 'rgba(255,255,255,0.5)' }}>Hasta</span>
+              <input type="date" value={to} min={from || undefined} onChange={e => setTo(e.target.value)}
+                className={`${inputBase} px-3 py-3`} style={{ ...inputStyle, colorScheme: 'dark' }} />
+            </label>
+          </div>
         </div>
         <div className="flex gap-2 flex-wrap">
           {([['Hoy', 0], ['7 días', 7], ['30 días', 30], ['Todo', 'all']] as const).map(([l, d]) => (
