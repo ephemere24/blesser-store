@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const data = await req.json()
-  const { flavors, onSale, salePrice, ...productData } = data
+  const { flavors, onSale, salePrice, saleEndsAt, ...productData } = data
 
   const cleanFlavors = flavors?.map(({ name, stock }: { name: string; stock?: number }) => {
     const units = Math.max(0, Math.floor(Number(stock) || 0))
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       ...productData,
       onSale: sale,
       salePrice: sale && salePrice != null ? Number(salePrice) : null,
+      saleEndsAt: sale && saleEndsAt ? new Date(saleEndsAt) : null,
       flavors: cleanFlavors ? { create: cleanFlavors } : undefined,
     },
     include: { flavors: true },

@@ -5,13 +5,14 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { gsap } from 'gsap'
-import { effectivePrice, discountPct } from '@/lib/price'
+import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
+import SaleCountdown from '@/components/SaleCountdown'
 
 interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
-  onSale: boolean; salePrice: number | null
+  onSale: boolean; salePrice: number | null; saleEndsAt: string | null
 }
 
 function ImageGallery({ images, name, category }: { images: string[]; name: string; category: string }) {
@@ -92,6 +93,7 @@ export default function ProductPage() {
   const [added, setAdded] = useState(false)
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null)
   const [cartCount, setCartCount] = useState(0)
+  const [, setSaleTick] = useState(0)
 
   const pageRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLElement>(null)
@@ -214,10 +216,15 @@ export default function ProductPage() {
           </div>
 
           {discountPct(product) != null && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold tracking-wide"
-                  style={{ background: 'var(--danger)', color: '#fff' }}>
-              LIQUIDACIÓN −{discountPct(product)}%
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold tracking-wide"
+                    style={{ background: 'var(--danger)', color: '#fff' }}>
+                LIQUIDACIÓN −{discountPct(product)}%
+              </span>
+              {isSaleActive(product) && product.saleEndsAt && (
+                <SaleCountdown endsAt={product.saleEndsAt} size="md" onExpire={() => setSaleTick(t => t + 1)} />
+              )}
+            </div>
           )}
 
           {product.specs && (

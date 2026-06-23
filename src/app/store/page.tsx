@@ -7,7 +7,8 @@ import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
-import { effectivePrice, discountPct } from '@/lib/price'
+import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
+import SaleCountdown from '@/components/SaleCountdown'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -15,7 +16,7 @@ interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
-  onSale: boolean; salePrice: number | null
+  onSale: boolean; salePrice: number | null; saleEndsAt: string | null
 }
 interface CartItem {
   id: number; productId: number; flavorId: number | null; quantity: number; product: Product; flavor: Flavor | null
@@ -46,6 +47,7 @@ export default function StorePage() {
   const [busy, setBusy] = useState(false)
   const [cartStep, setCartStep] = useState<'items' | 'pickup'>('items')
   const [closures, setClosures] = useState<{ date: string; time: string | null }[]>([])
+  const [, setSaleTick] = useState(0)
   const router = useRouter()
 
   const closedDays = useMemo(() => closures.filter(c => !c.time).map(c => c.date), [closures])
@@ -343,6 +345,11 @@ export default function StorePage() {
                       </Link>
                       {product.specs && (
                         <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{product.specs}</p>
+                      )}
+                      {isSaleActive(product) && product.saleEndsAt && (
+                        <div className="mt-2">
+                          <SaleCountdown endsAt={product.saleEndsAt} onExpire={() => setSaleTick(t => t + 1)} />
+                        </div>
                       )}
                     </div>
 

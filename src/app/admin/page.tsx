@@ -11,14 +11,14 @@ interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; visible: boolean; position: number
-  images: string; flavors: Flavor[]; onSale: boolean; salePrice: number | null
+  images: string; flavors: Flavor[]; onSale: boolean; salePrice: number | null; saleEndsAt: string | null
 }
 interface AccessCode { id: number; code: string; clientName: string | null; phone?: string | null; active: boolean }
 
 const emptyProduct = {
   name: '', price: 0, description: '', specs: '', category: '',
   visible: true, position: 0, images: '[]', flavors: [] as Flavor[],
-  onSale: false, salePrice: null as number | null,
+  onSale: false, salePrice: null as number | null, saleEndsAt: null as string | null,
 }
 
 function ImageManager({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
@@ -172,6 +172,7 @@ export default function AdminPage() {
     open: false, product: { ...emptyProduct }
   })
   const [flavorInput, setFlavorInput] = useState('')
+  const [saleDur, setSaleDur] = useState<{ value: number; unit: 'hours' | 'days' }>({ value: 24, unit: 'hours' })
   const [newCode, setNewCode] = useState({ code: '', clientName: '' })
   const [saving, setSaving] = useState(false)
   const [autoAccept, setAutoAccept] = useState(false)
@@ -624,6 +625,48 @@ export default function AdminPage() {
               {modal.product.onSale && modal.product.salePrice != null && modal.product.salePrice >= modal.product.price && (
                 <p className="text-xs mt-2" style={{ color: 'var(--danger)' }}>El precio de liquidación debería ser menor que el normal ({modal.product.price} €).</p>
               )}
+
+              {modal.product.onSale && (() => {
+                const temporal = !!modal.product.saleEndsAt
+                const applyDur = (value: number, unit: 'hours' | 'days') => {
+                  const ms = unit === 'days' ? value * 86400000 : value * 3600000
+                  const ends = new Date(Date.now() + ms).toISOString()
+                  setModal(m => ({ ...m, product: { ...m.product, saleEndsAt: ends } }))
+                }
+                return (
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={temporal}
+                        onChange={e => {
+                          if (e.target.checked) applyDur(saleDur.value, saleDur.unit)
+                          else setModal(m => ({ ...m, product: { ...m.product, saleEndsAt: null } }))
+                        }} />
+                      <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>Oferta por tiempo limitado</span>
+                    </label>
+                    {temporal && (
+                      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>Duración</span>
+                        <input type="number" min={1} value={saleDur.value}
+                          onChange={e => { const v = Math.max(1, Number(e.target.value) || 1); setSaleDur(s => ({ ...s, value: v })); applyDur(v, saleDur.unit) }}
+                          className="w-20 px-2 py-1.5 rounded-lg text-sm text-center outline-none"
+                          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+                        <select value={saleDur.unit}
+                          onChange={e => { const u = e.target.value as 'hours' | 'days'; setSaleDur(s => ({ ...s, unit: u })); applyDur(saleDur.value, u) }}
+                          className="px-2 py-1.5 rounded-lg text-sm outline-none"
+                          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
+                          <option value="hours">horas</option>
+                          <option value="days">días</option>
+                        </select>
+                        {modal.product.saleEndsAt && (
+                          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                            Termina: {new Date(modal.product.saleEndsAt).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Imágenes */}

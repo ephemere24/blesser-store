@@ -52,6 +52,7 @@ model Product {
   visible     Boolean  @default(true)
   onSale      Boolean  @default(false)
   salePrice   Float?
+  saleEndsAt  DateTime?
   position    Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
