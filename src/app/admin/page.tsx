@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check } from 'lucide-react'
 import AgendaTab from './AgendaTab'
 import HorarioTab from './HorarioTab'
 
@@ -159,8 +159,10 @@ function ImageManager({ images, onChange }: { images: string[]; onChange: (imgs:
 export default function AdminPage() {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
+  const [rememberAdmin, setRememberAdmin] = useState(true)
   const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario'>('agenda')
   const [products, setProducts] = useState<Product[]>([])
   const [codes, setCodes] = useState<AccessCode[]>([])
@@ -185,11 +187,16 @@ export default function AdminPage() {
     if (authed) { loadProducts(); loadCodes() }
   }, [authed, loadProducts, loadCodes])
 
+  // Recuperar sesión de admin si la cookie sigue válida
+  useEffect(() => {
+    fetch('/api/auth/admin').then(r => { if (r.ok) setAuthed(true) }).finally(() => setCheckingAuth(false))
+  }, [])
+
   async function login(e: React.FormEvent) {
     e.preventDefault()
     const res = await fetch('/api/auth/admin', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, remember: rememberAdmin }),
     })
     if (res.ok) { setAuthed(true) }
     else { setAuthError('Contraseña incorrecta') }
@@ -285,6 +292,13 @@ export default function AdminPage() {
     }))
   }
 
+  // Mientras se comprueba la sesión guardada
+  if (checkingAuth) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+      <div className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
   // Pantalla de login admin
   if (!authed) return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
@@ -303,6 +317,15 @@ export default function AdminPage() {
             className="w-full px-4 py-3 rounded-xl text-center outline-none"
             style={{ background: 'var(--surface2)', border: `1px solid ${authError ? 'var(--danger)' : 'var(--border)'}`, color: 'var(--accent2)' }} />
           {authError && <p className="text-center text-sm" style={{ color: 'var(--danger)' }}>{authError}</p>}
+          <button type="button" onClick={() => setRememberAdmin(r => !r)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer select-none transition-all"
+                  style={{ background: rememberAdmin ? 'rgba(255,255,255,0.06)' : 'var(--surface2)', border: `1px solid ${rememberAdmin ? 'var(--accent2)' : 'var(--border)'}` }}>
+            <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+                  style={{ background: rememberAdmin ? 'var(--accent2)' : 'transparent', border: `2px solid ${rememberAdmin ? 'var(--accent2)' : 'var(--muted)'}` }}>
+              {rememberAdmin && <Check size={14} strokeWidth={3} style={{ color: 'var(--bg)' }} />}
+            </span>
+            <span className="text-sm font-medium" style={{ color: rememberAdmin ? 'var(--accent2)' : 'var(--muted)' }}>Mantener sesión iniciada</span>
+          </button>
           <button type="submit"
             className="w-full py-3 rounded-xl font-semibold cursor-pointer"
             style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
