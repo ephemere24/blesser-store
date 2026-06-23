@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [reqLoading, setReqLoading] = useState(false)
   const [reqError, setReqError] = useState('')
   const [reqDone, setReqDone] = useState(false)
+  const [reqCode, setReqCode] = useState('')
   const router = useRouter()
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -65,6 +66,8 @@ export default function LoginPage() {
       body: JSON.stringify({ name: reqName, phone: reqPhone }),
     })
     if (res.ok) {
+      const data = await res.json().catch(() => ({}))
+      if (data.autoAccepted && data.code) setReqCode(data.code)
       setReqDone(true)
     } else {
       const data = await res.json().catch(() => ({}))
@@ -197,7 +200,22 @@ export default function LoginPage() {
           <div className="w-full max-w-sm rounded-2xl p-6"
                style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
                onClick={e => e.stopPropagation()}>
-            {reqDone ? (
+            {reqDone && reqCode ? (
+              <div className="text-center py-4">
+                <div className="text-4xl mb-3">🎉</div>
+                <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--accent2)' }}>¡Acceso concedido!</h3>
+                <p className="text-sm mb-3" style={{ color: 'var(--muted)' }}>Este es tu código de acceso. Guárdalo:</p>
+                <div className="text-2xl font-black font-mono tracking-widest py-3 mb-4 rounded-xl"
+                     style={{ background: 'var(--surface2)', color: 'var(--accent2)', border: '1px solid var(--border)' }}>
+                  {reqCode}
+                </div>
+                <button onClick={() => { setCode(reqCode); setShowRequest(false) }}
+                        className="w-full py-3 rounded-xl font-semibold text-sm cursor-pointer"
+                        style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                  Usar este código
+                </button>
+              </div>
+            ) : reqDone ? (
               <div className="text-center py-4">
                 <div className="text-4xl mb-3">✅</div>
                 <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--accent2)' }}>Solicitud enviada</h3>

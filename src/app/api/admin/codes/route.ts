@@ -24,21 +24,23 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { id, active } = await req.json()
-  const updated = await prisma.accessCode.update({ where: { id }, data: { active } })
-  return NextResponse.json(updated)
+  const { id, ids, active } = await req.json()
+  const targetIds: number[] = Array.isArray(ids) ? ids : [id]
+  await prisma.accessCode.updateMany({ where: { id: { in: targetIds } }, data: { active } })
+  return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { id } = await req.json()
+  const { id, ids } = await req.json()
+  const targetIds: number[] = Array.isArray(ids) ? ids : [id]
 
   // Eliminar primero los datos dependientes (carrito y pedidos) para evitar
-  // que la clave foránea bloquee el borrado del código.
+  // que la clave foránea bloquee el borrado de los códigos.
   await prisma.$transaction([
-    prisma.cart.deleteMany({ where: { accessCodeId: id } }),
-    prisma.order.deleteMany({ where: { accessCodeId: id } }),
-    prisma.accessCode.delete({ where: { id } }),
+    prisma.cart.deleteMany({ where: { accessCodeId: { in: targetIds } } }),
+    prisma.order.deleteMany({ where: { accessCodeId: { in: targetIds } } }),
+    prisma.accessCode.deleteMany({ where: { id: { in: targetIds } } }),
   ])
 
   return NextResponse.json({ ok: true })

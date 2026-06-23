@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { sendMessage } from '@/lib/telegram'
+import { generateUniqueCode, getSetting } from '@/lib/codes'
 
 export async function POST(req: NextRequest) {
   const { name, phone } = await req.json().catch(() => ({ name: '', phone: '' }))
@@ -16,9 +17,31 @@ export async function POST(req: NextRequest) {
     data: { name: cleanName, phone: cleanPhone },
   })
 
-  // ¿Este teléfono ya tiene un código? Entonces se regenerará, no se crea otro usuario.
   const existing = await prisma.accessCode.findFirst({ where: { phone: cleanPhone } })
+  const autoAccept = (await getSetting('autoAcceptCodes')) === 'true'
 
+  // --- Auto-aceptación: genera el código al instante ---
+  if (autoAccept) {
+    const code = await generateUniqueCode()
+    if (existing) {
+      await prisma.accessCode.update({ where: { id: existing.id }, data: { code, clientName: cleanName, active: true } })
+    } else {
+      await prisma.accessCode.create({ data: { code, clientName: cleanName, phone: cleanPhone } })
+    }
+    await prisma.accessRequest.update({ where: { id: request.id }, data: { status: 'approved', generatedCode: code } })
+
+    await sendMessage(
+      `✅ <b>Código generado automáticamente</b>\n\n` +
+      `👤 Nombre: <b>${cleanName}</b>\n` +
+      `📞 Teléfono: <b>${cleanPhone}</b>\n` +
+      `🔑 Código: <code>${code}</code>` +
+      (existing ? `\n\n(Se regeneró el código de un cliente existente)` : '')
+    )
+
+    return NextResponse.json({ ok: true, autoAccepted: true, code })
+  }
+
+  // --- Flujo normal: solicitud con aprobación manual en Telegram ---
   const message = existing
     ? `🔁 <b>Solicitud de NUEVO código</b>\n\n` +
       `Este teléfono ya tiene un código: <code>${existing.code}</code>\n\n` +
@@ -34,5 +57,5 @@ export async function POST(req: NextRequest) {
     { text: '❌ Rechazar', callback_data: `reject:${request.id}` },
   ]])
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, autoAccepted: false })
 }

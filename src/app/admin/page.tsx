@@ -172,6 +172,8 @@ export default function AdminPage() {
   const [flavorInput, setFlavorInput] = useState('')
   const [newCode, setNewCode] = useState({ code: '', clientName: '' })
   const [saving, setSaving] = useState(false)
+  const [autoAccept, setAutoAccept] = useState(false)
+  const [selectedCodes, setSelectedCodes] = useState<number[]>([])
 
   const loadProducts = useCallback(async () => {
     const r = await fetch('/api/admin/products')
@@ -186,6 +188,31 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed) { loadProducts(); loadCodes() }
   }, [authed, loadProducts, loadCodes])
+
+  useEffect(() => {
+    if (authed) fetch('/api/admin/settings').then(r => r.ok ? r.json() : null).then(d => { if (d) setAutoAccept(d.autoAccept) })
+  }, [authed])
+
+  async function toggleAutoAccept() {
+    const v = !autoAccept
+    setAutoAccept(v)
+    await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ autoAccept: v }) })
+  }
+  function toggleSelect(id: number) {
+    setSelectedCodes(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
+  }
+  function toggleSelectAll() {
+    setSelectedCodes(s => s.length === codes.length ? [] : codes.map(c => c.id))
+  }
+  async function bulkSetActive(active: boolean) {
+    await fetch('/api/admin/codes', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: selectedCodes, active }) })
+    setSelectedCodes([]); loadCodes()
+  }
+  async function bulkDelete() {
+    if (!confirm(`¿Eliminar ${selectedCodes.length} código(s)?`)) return
+    await fetch('/api/admin/codes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: selectedCodes }) })
+    setSelectedCodes([]); loadCodes()
+  }
 
   // Recuperar sesión de admin si la cookie sigue válida
   useEffect(() => {
@@ -435,7 +462,32 @@ export default function AdminPage() {
         {tab === 'codes' && (
           <div>
             <h2 className="font-bold mb-4" style={{ color: 'var(--accent2)' }}>Códigos de acceso</h2>
-            <form onSubmit={addCode} className="flex gap-2 mb-6">
+
+            {/* Auto-aceptar */}
+            <button type="button" onClick={toggleAutoAccept}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer select-none transition-all mb-4 text-left"
+                    style={{ background: autoAccept ? 'rgba(34,197,94,0.1)' : 'var(--surface2)', border: `1px solid ${autoAccept ? 'var(--success)' : 'var(--border)'}` }}>
+              <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+                    style={{ background: autoAccept ? 'var(--success)' : 'transparent', border: `2px solid ${autoAccept ? 'var(--success)' : 'var(--muted)'}` }}>
+                {autoAccept && <Check size={13} strokeWidth={3} style={{ color: 'var(--bg)' }} />}
+              </span>
+              <span className="min-w-0">
+                <span className="text-sm font-semibold block" style={{ color: autoAccept ? 'var(--success)' : 'var(--accent2)' }}>Auto-aceptar solicitudes</span>
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>Si está activo, las solicitudes generan el código al instante (sin aprobar en Telegram). Igual recibes un aviso con los datos.</span>
+              </span>
+            </button>
+
+            {selectedCodes.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 p-2 rounded-xl flex-wrap" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                <span className="text-sm font-medium px-2" style={{ color: 'var(--accent2)' }}>{selectedCodes.length} seleccionado(s)</span>
+                <button onClick={() => bulkSetActive(false)} className="text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium" style={{ background: 'var(--surface)', color: 'var(--accent)' }}>Desactivar</button>
+                <button onClick={() => bulkSetActive(true)} className="text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium" style={{ background: 'var(--surface)', color: 'var(--accent)' }}>Activar</button>
+                <button onClick={bulkDelete} className="text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>Eliminar</button>
+                <button onClick={() => setSelectedCodes([])} className="text-xs px-3 py-1.5 rounded-lg cursor-pointer ml-auto" style={{ color: 'var(--muted)' }}>Cancelar</button>
+              </div>
+            )}
+
+            <form onSubmit={addCode} className="flex gap-2 mb-4">
               <input value={newCode.code} onChange={e => setNewCode(n => ({ ...n, code: e.target.value.toUpperCase() }))}
                 placeholder="CÓDIGO" required
                 className="flex-1 px-3 py-2 rounded-xl text-sm outline-none font-mono"
@@ -450,10 +502,23 @@ export default function AdminPage() {
               </button>
             </form>
 
+            {codes.length > 0 && (
+              <button onClick={toggleSelectAll} className="text-xs mb-2 cursor-pointer" style={{ color: 'var(--accent)' }}>
+                {selectedCodes.length === codes.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+              </button>
+            )}
+
             <div className="space-y-2">
-              {codes.map(c => (
+              {codes.map(c => {
+                const sel = selectedCodes.includes(c.id)
+                return (
                 <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl"
-                     style={{ background: 'var(--surface)', border: '1px solid var(--border)', opacity: c.active ? 1 : 0.5 }}>
+                     style={{ background: sel ? 'var(--surface2)' : 'var(--surface)', border: `1px solid ${sel ? 'var(--accent2)' : 'var(--border)'}`, opacity: c.active ? 1 : 0.5 }}>
+                  <button onClick={() => toggleSelect(c.id)}
+                          className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 cursor-pointer"
+                          style={{ background: sel ? 'var(--accent2)' : 'transparent', border: `2px solid ${sel ? 'var(--accent2)' : 'var(--muted)'}` }}>
+                    {sel && <Check size={13} strokeWidth={3} style={{ color: 'var(--bg)' }} />}
+                  </button>
                   <code className="text-sm font-mono font-bold flex-1"
                         style={{ color: c.active ? 'var(--accent2)' : 'var(--muted)' }}>
                     {c.code}
@@ -477,7 +542,8 @@ export default function AdminPage() {
                     <Trash2 size={12} />
                   </button>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
