@@ -48,3 +48,7 @@ prisma/dev.db-journal
 public/uploads/*
 !public/uploads/.gitkeep
 backup-data.json
+
+.agents/
+.claude/
+skills-lock.json
