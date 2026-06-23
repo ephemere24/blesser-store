@@ -43,10 +43,14 @@ export default function StorePage() {
   const [pickupTime, setPickupTime] = useState('')
   const [busy, setBusy] = useState(false)
   const [cartStep, setCartStep] = useState<'items' | 'pickup'>('items')
+  const [closures, setClosures] = useState<{ date: string; time: string | null }[]>([])
   const router = useRouter()
 
-  const pickupDays = useMemo(() => getPickupDays(), [])
-  const timeSlots = useMemo(() => pickupDate ? getTimeSlots(pickupDate) : [], [pickupDate])
+  const closedDays = useMemo(() => closures.filter(c => !c.time).map(c => c.date), [closures])
+  const pickupDays = useMemo(() => getPickupDays(new Date(), closedDays), [closedDays])
+  const timeSlots = useMemo(() =>
+    pickupDate ? getTimeSlots(pickupDate, new Date(), closures.filter(c => c.date === pickupDate && c.time).map(c => c.time as string)) : [],
+    [pickupDate, closures])
 
   const headerRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -73,11 +77,13 @@ export default function StorePage() {
       fetch('/api/products').then(r => { if (r.status === 401) { router.push('/'); return [] } return r.ok ? r.json() : [] }).catch(() => []),
       fetch('/api/cart').then(r => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/orders').then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([prods, cartData, orders]) => {
+      fetch('/api/closures').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([prods, cartData, orders, cls]) => {
       setProducts(Array.isArray(prods) ? prods : [])
       setCart(cartData)
       const list = Array.isArray(orders) ? orders : []
       setActiveOrder(list.find((o: Order) => o.status === 'pending') || null)
+      setClosures(Array.isArray(cls) ? cls : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }

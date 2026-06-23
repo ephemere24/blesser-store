@@ -73,6 +73,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!isValidPickup(body.pickupDate, body.pickupTime)) {
       return NextResponse.json({ error: 'El día u hora de recogida no son válidos' }, { status: 400 })
     }
+    const closed = await prisma.closure.findFirst({ where: { date: body.pickupDate, OR: [{ time: null }, { time: body.pickupTime }] } })
+    if (closed) return NextResponse.json({ error: 'Ese día u hora ya no está disponible' }, { status: 409 })
     draftDate = body.pickupDate
     draftTime = body.pickupTime
   } else if (body.op === 'addItem') {

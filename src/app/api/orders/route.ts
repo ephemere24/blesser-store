@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
   if (!isValidPickup(pickupDate, pickupTime)) {
     return NextResponse.json({ error: 'El día u hora de recogida no son válidos' }, { status: 400 })
   }
+  const closed = await prisma.closure.findFirst({ where: { date: pickupDate, OR: [{ time: null }, { time: pickupTime }] } })
+  if (closed) return NextResponse.json({ error: 'Ese día u hora ya no está disponible' }, { status: 409 })
 
   const cart = await prisma.cart.findUnique({
     where: { accessCodeId: user.codeId },

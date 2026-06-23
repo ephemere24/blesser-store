@@ -18,6 +18,15 @@ model AccessCode {
   orders    Order[]
 }
 
+model Closure {
+  id        Int      @id @default(autoincrement())
+  date      String   // YYYY-MM-DD
+  time      String?  // HH:MM ; null = día completo cerrado
+  createdAt DateTime @default(now())
+
+  @@unique([date, time])
+}
+
 model AccessRequest {
   id            Int      @id @default(autoincrement())
   name          String

@@ -21,22 +21,25 @@ export function formatDayLabel(d: Date): string {
   return `${DAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
 }
 
-// Próximos días válidos (sin domingos), empezando por hoy.
-export function getPickupDays(now: Date = new Date()): { value: string; label: string }[] {
+// Próximos días válidos (sin domingos ni días cerrados), empezando por hoy.
+export function getPickupDays(now: Date = new Date(), closedDays: string[] = []): { value: string; label: string }[] {
   const days: { value: string; label: string }[] = []
   const cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  while (days.length < PICKUP_DAYS_AHEAD) {
-    if (cursor.getDay() !== 0) {
-      days.push({ value: dateToValue(cursor), label: formatDayLabel(cursor) })
+  let scanned = 0
+  while (days.length < PICKUP_DAYS_AHEAD && scanned < 60) {
+    const value = dateToValue(cursor)
+    if (cursor.getDay() !== 0 && !closedDays.includes(value)) {
+      days.push({ value, label: formatDayLabel(cursor) })
     }
     cursor.setDate(cursor.getDate() + 1)
+    scanned++
   }
   return days
 }
 
 // Franjas horarias de un día, desde 14:00 hasta 21:00 inclusive.
-// Para hoy, solo se muestran las franjas que aún no han pasado.
-export function getTimeSlots(dateValue: string, now: Date = new Date()): string[] {
+// Para hoy, solo se muestran las franjas que aún no han pasado. Excluye franjas cerradas.
+export function getTimeSlots(dateValue: string, now: Date = new Date(), closedTimes: string[] = []): string[] {
   const slots: string[] = []
   const isToday = dateValue === dateToValue(now)
   const minMinutes = isToday ? (now.getHours() * 60 + now.getMinutes()) : -1
@@ -45,14 +48,16 @@ export function getTimeSlots(dateValue: string, now: Date = new Date()): string[
   const endTotal = PICKUP_END_HOUR * 60 // 21:00 inclusive
 
   for (let total = startTotal; total <= endTotal; total += SLOT_MINUTES) {
-    if (total > minMinutes) {
-      slots.push(`${pad(Math.floor(total / 60))}:${pad(total % 60)}`)
+    const label = `${pad(Math.floor(total / 60))}:${pad(total % 60)}`
+    if (total > minMinutes && !closedTimes.includes(label)) {
+      slots.push(label)
     }
   }
   return slots
 }
 
-// Validación en servidor: comprueba que día y hora son válidos.
+// Validación base (día/hora dentro del horario). Las franjas/días cerrados se
+// validan aparte contra la base de datos en el servidor.
 export function isValidPickup(dateValue: string, time: string, now: Date = new Date()): boolean {
   const validDay = getPickupDays(now).some(d => d.value === dateValue)
   if (!validDay) return false
