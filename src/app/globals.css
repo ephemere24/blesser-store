@@ -25,12 +25,29 @@ body {
 ::-webkit-scrollbar-track { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 @keyframes bs-rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.bs-rise { animation: bs-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.bs-rise { animation: bs-rise 0.45s var(--ease-out) both; }
+
+/* Feedback de pulsación en todos los botones (estilo Emil) */
+button:not(:disabled) { transition: transform 0.13s var(--ease-out); }
+button:not(:disabled):active { transform: scale(0.97); }
+
+/* Elevación sutil de las tarjetas de producto al pasar el ratón */
+@media (hover: hover) and (pointer: fine) {
+  .product-card { transition: transform 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
+  .product-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.18) !important; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .bs-rise { animation: none; }
+  button:not(:disabled):active { transform: none; }
+  .product-card:hover { transform: none; }
 }
