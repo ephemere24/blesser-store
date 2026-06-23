@@ -47,10 +47,11 @@ export default function StorePage() {
   const router = useRouter()
 
   const closedDays = useMemo(() => closures.filter(c => !c.time).map(c => c.date), [closures])
-  const pickupDays = useMemo(() => getPickupDays(new Date(), closedDays), [closedDays])
-  const timeSlots = useMemo(() =>
-    pickupDate ? getTimeSlots(pickupDate, new Date(), closures.filter(c => c.date === pickupDate && c.time).map(c => c.time as string)) : [],
-    [pickupDate, closures])
+  // Mostramos TODOS los días/franjas; los cerrados se ven en gris y no seleccionables.
+  const pickupDays = useMemo(() => getPickupDays(new Date(), []), [])
+  const timeSlots = useMemo(() => pickupDate ? getTimeSlots(pickupDate, new Date(), []) : [], [pickupDate])
+  const closedTimesForPickup = useMemo(() => closures.filter(c => c.date === pickupDate && c.time).map(c => c.time as string), [closures, pickupDate])
+  const isDayClosed = (v: string) => closedDays.includes(v)
 
   const headerRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -412,17 +413,21 @@ export default function StorePage() {
                     <div>
                       <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Calendar size={12} /> Día</p>
                       <div className="flex gap-1.5 overflow-x-auto pb-1">
-                        {pickupDays.map(d => (
-                          <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
-                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer capitalize transition-all"
+                        {pickupDays.map(d => {
+                          const closed = isDayClosed(d.value)
+                          return (
+                          <button key={d.value} disabled={closed} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
+                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all disabled:cursor-not-allowed"
                             style={{
                               background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
-                              color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                              color: pickupDate === d.value ? 'var(--bg)' : closed ? 'var(--muted)' : 'var(--accent)',
                               border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                              opacity: closed ? 0.4 : 1, textDecoration: closed ? 'line-through' : 'none',
                             }}>
                             {d.label}
                           </button>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                     {pickupDate && (
@@ -432,17 +437,21 @@ export default function StorePage() {
                           <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas ese día.</p>
                         ) : (
                           <div className="grid grid-cols-4 gap-1.5">
-                            {timeSlots.map(t => (
-                              <button key={t} disabled={busy} onClick={() => chooseOrderTime(t)}
-                                className="px-2 py-2 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50 transition-all"
+                            {timeSlots.map(t => {
+                              const closed = closedTimesForPickup.includes(t)
+                              return (
+                              <button key={t} disabled={busy || closed} onClick={() => chooseOrderTime(t)}
+                                className="px-2 py-2 rounded-lg text-sm font-medium disabled:cursor-not-allowed transition-all"
                                 style={{
                                   background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
-                                  color: pickupTime === t ? 'var(--bg)' : 'var(--accent)',
+                                  color: pickupTime === t ? 'var(--bg)' : closed ? 'var(--muted)' : 'var(--accent)',
                                   border: `1px solid ${pickupTime === t ? 'var(--accent2)' : 'var(--border)'}`,
+                                  opacity: closed ? 0.4 : 1, textDecoration: closed ? 'line-through' : 'none',
                                 }}>
                                 {t}
                               </button>
-                            ))}
+                              )
+                            })}
                           </div>
                         )}
                       </div>
@@ -540,17 +549,21 @@ export default function StorePage() {
                     <div>
                       <p className="text-xs mb-1.5 flex items-center gap-1" style={{ color: 'var(--muted)' }}><Calendar size={12} /> Día</p>
                       <div className="flex gap-1.5 overflow-x-auto pb-1">
-                        {pickupDays.map(d => (
-                          <button key={d.value} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
-                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer capitalize transition-all"
+                        {pickupDays.map(d => {
+                          const closed = isDayClosed(d.value)
+                          return (
+                          <button key={d.value} disabled={closed} onClick={() => { setPickupDate(d.value); setPickupTime('') }}
+                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all disabled:cursor-not-allowed"
                             style={{
                               background: pickupDate === d.value ? 'var(--accent2)' : 'var(--surface)',
-                              color: pickupDate === d.value ? 'var(--bg)' : 'var(--accent)',
+                              color: pickupDate === d.value ? 'var(--bg)' : closed ? 'var(--muted)' : 'var(--accent)',
                               border: `1px solid ${pickupDate === d.value ? 'var(--accent2)' : 'var(--border)'}`,
+                              opacity: closed ? 0.4 : 1, textDecoration: closed ? 'line-through' : 'none',
                             }}>
                             {d.label}
                           </button>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                     {pickupDate && (
@@ -560,17 +573,21 @@ export default function StorePage() {
                           <p className="text-xs" style={{ color: 'var(--danger)' }}>No quedan horas disponibles hoy, elige otro día.</p>
                         ) : (
                           <div className="grid grid-cols-4 gap-1.5">
-                            {timeSlots.map(t => (
-                              <button key={t} onClick={() => setPickupTime(t)}
-                                className="px-2 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all"
+                            {timeSlots.map(t => {
+                              const closed = closedTimesForPickup.includes(t)
+                              return (
+                              <button key={t} disabled={closed} onClick={() => setPickupTime(t)}
+                                className="px-2 py-2 rounded-lg text-sm font-medium transition-all disabled:cursor-not-allowed"
                                 style={{
                                   background: pickupTime === t ? 'var(--accent2)' : 'var(--surface)',
-                                  color: pickupTime === t ? 'var(--bg)' : 'var(--accent)',
+                                  color: pickupTime === t ? 'var(--bg)' : closed ? 'var(--muted)' : 'var(--accent)',
                                   border: `1px solid ${pickupTime === t ? 'var(--accent2)' : 'var(--border)'}`,
+                                  opacity: closed ? 0.4 : 1, textDecoration: closed ? 'line-through' : 'none',
                                 }}>
                                 {t}
                               </button>
-                            ))}
+                              )
+                            })}
                           </div>
                         )}
                       </div>
