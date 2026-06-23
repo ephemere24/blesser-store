@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Package, RefreshCw, Search, Trash2, Download, X, Check, ShoppingBag, Euro, Receipt, Calendar } from 'lucide-react'
 import { formatDayLabel } from '@/lib/pickup'
 
-interface OItem { id: number; productId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
+interface OItem { id: number; productId: number | null; productName: string; flavorName: string | null; price: number; quantity: number; onSale: boolean }
 interface Order {
   id: number; total: number; status: string; note: string | null; manual: boolean; createdAt: string
   pickupDate: string | null; pickupTime: string | null; customerName: string | null; customerPhone: string | null
@@ -31,6 +31,7 @@ export default function HistorialTab() {
   const [status, setStatus] = useState<string>('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [onlyOnSale, setOnlyOnSale] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
 
   async function load() {
@@ -53,6 +54,7 @@ export default function HistorialTab() {
     const q = search.trim().toLowerCase()
     return orders.filter(o => {
       if (status !== 'all' && o.status !== status) return false
+      if (onlyOnSale && !o.items.some(i => i.onSale)) return false
       if (productId && !o.items.some(i => i.productId === productId)) return false
       if (q) {
         const hay = `${orderName(o)} ${orderPhone(o)} ${o.accessCode?.code ?? ''}`.toLowerCase()
@@ -63,7 +65,7 @@ export default function HistorialTab() {
       if (to && day > to) return false
       return true
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  }, [orders, search, productId, status, from, to])
+  }, [orders, search, productId, status, from, to, onlyOnSale])
 
   const revenue = filtered.filter(o => o.status === 'completed').reduce((s, o) => s + o.total, 0)
   const deliveredCount = filtered.filter(o => o.status === 'completed').length
@@ -76,7 +78,7 @@ export default function HistorialTab() {
     if (g) g.items.push(o); else groups.push({ day, items: [o] })
   }
 
-  const hasFilters = !!(search || productId || status !== 'all' || from || to)
+  const hasFilters = !!(search || productId || status !== 'all' || from || to || onlyOnSale)
   const allVisibleSelected = filtered.length > 0 && filtered.every(o => selected.has(o.id))
   function toggleSelectAll() { setSelected(allVisibleSelected ? new Set() : new Set(filtered.map(o => o.id))) }
   function toggle(id: number) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
@@ -191,8 +193,13 @@ export default function HistorialTab() {
               className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors hover:text-white"
               style={{ background: 'var(--surface2)', color: 'rgba(255,255,255,0.6)', border: '1px solid var(--border)' }}>{l}</button>
           ))}
+          <button onClick={() => setOnlyOnSale(v => !v)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+            style={{ background: onlyOnSale ? 'var(--danger)' : 'rgba(239,68,68,0.1)', color: onlyOnSale ? '#fff' : 'var(--danger)', border: '1px solid var(--danger)' }}>
+            Liquidación
+          </button>
           {hasFilters && (
-            <button onClick={() => { setSearch(''); setProductId(null); setStatus('all'); setFrom(''); setTo('') }}
+            <button onClick={() => { setSearch(''); setProductId(null); setStatus('all'); setFrom(''); setTo(''); setOnlyOnSale(false) }}
               className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer flex items-center gap-1"
               style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
               <X size={12} /> Limpiar
@@ -257,10 +264,11 @@ export default function HistorialTab() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: st.color }} />
                                 <span className="font-bold truncate" style={{ color: 'var(--accent2)' }}>{orderName(o)}</span>
                                 {o.manual && <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>manual</span>}
+                                {o.items.some(i => i.onSale) && <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0 font-bold" style={{ background: 'var(--danger)', color: '#fff' }}>LIQUIDACIÓN</span>}
                               </div>
                               <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
                                 {new Date(o.createdAt).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}

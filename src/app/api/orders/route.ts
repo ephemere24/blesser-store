@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { isValidPickup, formatDayLabel } from '@/lib/pickup'
+import { effectivePrice } from '@/lib/price'
 
 async function notifyTelegram(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
   }
 
   const accessCode = await prisma.accessCode.findUnique({ where: { id: user.codeId } })
-  const total = cart.items.reduce((s, i) => s + i.quantity * i.product.price, 0)
+  const total = cart.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0)
 
   // Crear pedido, descontar stock y vaciar carrito de forma atómica
   const order = await prisma.$transaction(async (tx) => {
@@ -92,7 +93,8 @@ export async function POST(req: NextRequest) {
             flavorId: i.flavorId,
             productName: i.product.name,
             flavorName: i.flavor?.name ?? null,
-            price: i.product.price,
+            price: effectivePrice(i.product),
+            onSale: i.product.onSale,
             quantity: i.quantity,
           })),
         },

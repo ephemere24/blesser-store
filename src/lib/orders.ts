@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { sendMessage } from '@/lib/telegram'
 import { formatDayLabel } from '@/lib/pickup'
+import { effectivePrice } from '@/lib/price'
 
 export type EditOp =
   | { op: 'setQty'; itemId: number; quantity: number }
@@ -104,7 +105,8 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
             flavorId: edit.flavorId ?? null,
             productName: product.name,
             flavorName,
-            price: product.price,
+            price: effectivePrice(product),
+            onSale: product.onSale,
             quantity: qty,
           },
         })
@@ -247,7 +249,7 @@ export async function applyOrderSave(
   }
 
   // Resolver nombres/precio de las líneas
-  const lineData: { orderId: number; productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }[] = []
+  const lineData: { orderId: number; productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }[] = []
   for (const d of mergedDesired) {
     const product = await prisma.product.findUnique({ where: { id: d.productId } })
     if (!product) throw new OrderEditError('Producto no encontrado', 404)
@@ -259,7 +261,7 @@ export async function applyOrderSave(
     }
     lineData.push({
       orderId, productId: d.productId, flavorId: d.flavorId,
-      productName: product.name, flavorName, price: product.price, quantity: d.quantity,
+      productName: product.name, flavorName, price: effectivePrice(product), onSale: product.onSale, quantity: d.quantity,
     })
   }
   const total = lineData.reduce((s, l) => s + l.price * l.quantity, 0)

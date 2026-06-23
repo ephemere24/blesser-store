@@ -5,11 +5,13 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { gsap } from 'gsap'
+import { effectivePrice, discountPct } from '@/lib/price'
 
 interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
+  onSale: boolean; salePrice: number | null
 }
 
 function ImageGallery({ images, name, category }: { images: string[]; name: string; category: string }) {
@@ -203,8 +205,20 @@ export default function ProductPage() {
         <div ref={infoRef} className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold leading-tight" style={{ color: 'var(--accent2)' }}>{product.name}</h1>
-            <span className="text-2xl font-bold shrink-0" style={{ color: 'var(--accent2)' }}>{product.price} €</span>
+            <div className="text-right shrink-0">
+              {discountPct(product) != null && (
+                <span className="block text-sm line-through" style={{ color: 'var(--muted)' }}>{product.price} €</span>
+              )}
+              <span className="text-2xl font-bold" style={{ color: discountPct(product) != null ? '#f87171' : 'var(--accent2)' }}>{effectivePrice(product)} €</span>
+            </div>
           </div>
+
+          {discountPct(product) != null && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold tracking-wide"
+                  style={{ background: 'var(--danger)', color: '#fff' }}>
+              LIQUIDACIÓN −{discountPct(product)}%
+            </span>
+          )}
 
           {product.specs && (
             <p className="text-sm px-3 py-2 rounded-xl inline-block"

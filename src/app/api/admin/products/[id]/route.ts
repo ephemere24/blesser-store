@@ -32,6 +32,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       specs: String(productData.specs ?? ''),
       category: String(productData.category ?? ''),
       visible: Boolean(productData.visible),
+      onSale: Boolean(productData.onSale),
+      salePrice: productData.onSale && productData.salePrice != null ? Number(productData.salePrice) : null,
       position: Number(productData.position),
       images: String(productData.images ?? '[]'),
       flavors: cleanFlavors

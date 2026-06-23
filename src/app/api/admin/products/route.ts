@@ -21,16 +21,19 @@ export async function POST(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const data = await req.json()
-  const { flavors, ...productData } = data
+  const { flavors, onSale, salePrice, ...productData } = data
 
   const cleanFlavors = flavors?.map(({ name, stock }: { name: string; stock?: number }) => {
     const units = Math.max(0, Math.floor(Number(stock) || 0))
     return { name, stock: units, inStock: units > 0 }
   })
 
+  const sale = Boolean(onSale)
   const product = await prisma.product.create({
     data: {
       ...productData,
+      onSale: sale,
+      salePrice: sale && salePrice != null ? Number(salePrice) : null,
       flavors: cleanFlavors ? { create: cleanFlavors } : undefined,
     },
     include: { flavors: true },

@@ -11,13 +11,14 @@ interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; visible: boolean; position: number
-  images: string; flavors: Flavor[]
+  images: string; flavors: Flavor[]; onSale: boolean; salePrice: number | null
 }
 interface AccessCode { id: number; code: string; clientName: string | null; phone?: string | null; active: boolean }
 
 const emptyProduct = {
   name: '', price: 0, description: '', specs: '', category: '',
-  visible: true, position: 0, images: '[]', flavors: [] as Flavor[]
+  visible: true, position: 0, images: '[]', flavors: [] as Flavor[],
+  onSale: false, salePrice: null as number | null,
 }
 
 function ImageManager({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
@@ -596,6 +597,33 @@ export default function AdminPage() {
               <label htmlFor="visible" className="text-sm cursor-pointer" style={{ color: 'var(--accent)' }}>
                 Visible en la tienda
               </label>
+            </div>
+
+            {/* Liquidación */}
+            <div className="rounded-xl p-3" style={{ background: 'var(--surface2)', border: `1px solid ${modal.product.onSale ? 'var(--danger)' : 'var(--border)'}` }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={modal.product.onSale}
+                    onChange={e => setModal(m => ({ ...m, product: { ...m.product, onSale: e.target.checked } }))} />
+                  <span className="text-sm font-medium" style={{ color: modal.product.onSale ? 'var(--danger)' : 'var(--accent)' }}>
+                    Marcar como liquidación
+                  </span>
+                </label>
+                {modal.product.onSale && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: 'var(--muted)' }}>Precio liquidación</span>
+                    <input type="number" min={0} step="0.01" inputMode="decimal"
+                      value={modal.product.salePrice ?? ''}
+                      onChange={e => setModal(m => ({ ...m, product: { ...m.product, salePrice: e.target.value === '' ? null : Number(e.target.value) } }))}
+                      placeholder="€"
+                      className="w-24 px-2 py-1.5 rounded-lg text-sm text-center outline-none"
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+                  </div>
+                )}
+              </div>
+              {modal.product.onSale && modal.product.salePrice != null && modal.product.salePrice >= modal.product.price && (
+                <p className="text-xs mt-2" style={{ color: 'var(--danger)' }}>El precio de liquidación debería ser menor que el normal ({modal.product.price} €).</p>
+              )}
             </div>
 
             {/* Imágenes */}

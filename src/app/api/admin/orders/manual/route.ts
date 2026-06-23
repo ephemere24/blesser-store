@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAdminToken } from '@/lib/auth'
+import { effectivePrice } from '@/lib/price'
 
 function requireAdmin(req: NextRequest) {
   const token = req.cookies.get('bs_admin')?.value
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     else merged.set(key, { productId: it.productId, flavorId: it.flavorId ?? null, quantity: q })
   }
 
-  const lines: { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }[] = []
+  const lines: { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }[] = []
   for (const it of merged.values()) {
     const product = await prisma.product.findUnique({ where: { id: it.productId } })
     if (!product) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
       if (!f) return NextResponse.json({ error: 'Sabor no encontrado' }, { status: 404 })
       flavorName = f.name
     }
-    lines.push({ productId: it.productId, flavorId: it.flavorId, productName: product.name, flavorName, price: product.price, quantity: it.quantity })
+    lines.push({ productId: it.productId, flavorId: it.flavorId, productName: product.name, flavorName, price: effectivePrice(product), onSale: product.onSale, quantity: it.quantity })
   }
   const total = lines.reduce((s, l) => s + l.price * l.quantity, 0)
 

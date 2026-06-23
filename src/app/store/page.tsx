@@ -7,6 +7,7 @@ import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
+import { effectivePrice, discountPct } from '@/lib/price'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -14,6 +15,7 @@ interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
+  onSale: boolean; salePrice: number | null
 }
 interface CartItem {
   id: number; productId: number; flavorId: number | null; quantity: number; product: Product; flavor: Flavor | null
@@ -224,7 +226,7 @@ export default function StorePage() {
   }
 
   const cartCount = cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
-  const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * i.product.price, 0) ?? 0
+  const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0) ?? 0
   const orderCount = orderItems.reduce((s, i) => s + i.quantity, 0)
   const badgeCount = activeOrder ? orderCount : cartCount
 
@@ -303,6 +305,8 @@ export default function StorePage() {
               const inStockFlavors = product.flavors.filter(f => f.inStock)
               const selected = selectedFlavors[product.id] ?? null
               const imgs: string[] = JSON.parse(product.images || '[]')
+              const eff = effectivePrice(product)
+              const pct = discountPct(product)
 
               return (
                 <div key={product.id} className="product-card rounded-2xl overflow-hidden flex flex-col"
@@ -317,9 +321,16 @@ export default function StorePage() {
                           <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>{product.category}</span>
                         </div>
                       )}
-                      <div className="absolute top-3 right-3 px-2 py-1 rounded-lg text-xs font-bold"
+                      {pct != null && (
+                        <div className="absolute top-3 left-3 px-2 py-1 rounded-lg text-xs font-extrabold tracking-wide shadow-lg"
+                             style={{ background: 'var(--danger)', color: '#fff' }}>
+                          LIQUIDACIÓN −{pct}%
+                        </div>
+                      )}
+                      <div className="absolute top-3 right-3 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5"
                            style={{ background: 'var(--bg)', color: 'var(--accent2)' }}>
-                        {product.price} €
+                        {pct != null && <span className="line-through opacity-50 font-medium">{product.price}€</span>}
+                        <span style={{ color: pct != null ? '#f87171' : 'var(--accent2)' }}>{eff}€</span>
                       </div>
                     </div>
                   </Link>
@@ -629,7 +640,7 @@ export default function StorePage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{item.product.name}</p>
                         {item.flavor && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavor.name}</p>}
-                        <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.product.price).toFixed(2)} €</p>
+                        <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * effectivePrice(item.product)).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
                           <button onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
                                   className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
