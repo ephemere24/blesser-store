@@ -86,6 +86,10 @@ export default function StorePage() {
       setActiveOrder(list.find((o: Order) => o.status === 'pending') || null)
       setClosures(Array.isArray(cls) ? cls : [])
       setLoading(false)
+      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('cart') === '1') {
+        setCartStep('items'); setPanelOpen(true)
+        window.history.replaceState(null, '', '/store')
+      }
     }).catch(() => setLoading(false))
   }
 

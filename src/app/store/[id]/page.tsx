@@ -89,6 +89,7 @@ export default function ProductPage() {
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null)
+  const [cartCount, setCartCount] = useState(0)
 
   const pageRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLElement>(null)
@@ -107,8 +108,16 @@ export default function ProductPage() {
     })
     // ¿Hay un pedido abierto? Entonces se añade a ese pedido, no al carrito.
     fetch('/api/orders').then(r => r.ok ? r.json() : []).then((orders) => {
-      const pending = (orders || []).find((o: { status: string; id: number }) => o.status === 'pending')
+      const pending = (orders || []).find((o: { status: string; id: number; pendingChanges?: boolean; items?: { quantity: number }[]; draftItems?: { quantity: number }[] | null }) => o.status === 'pending')
       setActiveOrderId(pending?.id ?? null)
+      if (pending) {
+        const list = (pending.pendingChanges && pending.draftItems) ? pending.draftItems : (pending.items ?? [])
+        setCartCount(list.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0))
+      } else {
+        fetch('/api/cart').then(r => r.ok ? r.json() : null).then((cart) => {
+          setCartCount((cart?.items ?? []).reduce((s: number, i: { quantity: number }) => s + i.quantity, 0))
+        })
+      }
     })
   }, [id, router])
 
@@ -141,6 +150,7 @@ export default function ProductPage() {
         })
     if (res.ok) {
       setAdded(true)
+      setCartCount(c => c + 1)
       if (btnRef.current) gsap.fromTo(btnRef.current, { scale: 1.05 }, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' })
       setTimeout(() => setAdded(false), 900)
     } else {
@@ -170,7 +180,19 @@ export default function ProductPage() {
               style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
           <ArrowLeft size={16} />
         </Link>
-        <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>{product.category}</span>
+        <span className="flex-1 font-semibold text-sm" style={{ color: 'var(--accent2)' }}>{product.category}</span>
+        <Link href="/store?cart=1"
+              className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
+              style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+          <ShoppingCart size={16} />
+          <span>{activeOrderId ? 'Mi pedido' : 'Carrito'}</span>
+          {cartCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center"
+                  style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+              {cartCount}
+            </span>
+          )}
+        </Link>
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-8">
