@@ -33,7 +33,8 @@ export default function AgendaTab() {
   const [orders, setOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<PProduct[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'today' | 'tomorrow' | 'all'>('today')
+  const [filter, setFilter] = useState<'today' | 'tomorrow' | 'all' | 'delivered'>('today')
+  const [deliveredScope, setDeliveredScope] = useState<'today' | 'yesterday' | 'all'>('today')
   const [showNew, setShowNew] = useState(false)
   const [editing, setEditing] = useState<Order | null>(null)
   const [details, setDetails] = useState<Order | null>(null)
@@ -75,11 +76,19 @@ export default function AgendaTab() {
   const today = dateToValue(new Date())
   const tomorrowD = new Date(); tomorrowD.setDate(tomorrowD.getDate() + 1)
   const tomorrow = dateToValue(tomorrowD)
+  const yesterdayD = new Date(); yesterdayD.setDate(yesterdayD.getDate() - 1)
+  const yesterday = dateToValue(yesterdayD)
 
-  const visible = orders
-    .filter(o => o.status !== 'cancelled')
-    .filter(o => filter === 'all' ? true : filter === 'today' ? o.pickupDate === today : o.pickupDate === tomorrow)
-    .sort((a, b) => `${a.pickupDate} ${a.pickupTime}`.localeCompare(`${b.pickupDate} ${b.pickupTime}`))
+  const visible = filter === 'delivered'
+    ? orders
+        .filter(o => o.status === 'completed')
+        .filter(o => deliveredScope === 'all' ? true : deliveredScope === 'today' ? o.pickupDate === today : o.pickupDate === yesterday)
+        .sort((a, b) => `${b.pickupDate} ${b.pickupTime}`.localeCompare(`${a.pickupDate} ${a.pickupTime}`))
+    : orders
+        // En las vistas activas solo lo que queda por hacer (pendiente / preparado)
+        .filter(o => o.status === 'pending' || o.status === 'ready')
+        .filter(o => filter === 'all' ? true : filter === 'today' ? o.pickupDate === today : o.pickupDate === tomorrow)
+        .sort((a, b) => `${a.pickupDate} ${a.pickupTime}`.localeCompare(`${b.pickupDate} ${b.pickupTime}`))
 
   const pendingToday = orders.filter(o => o.pickupDate === today && (o.status === 'pending' || o.status === 'ready')).length
 
@@ -105,11 +114,11 @@ export default function AgendaTab() {
         </div>
       </div>
 
-      {/* Filtro de día */}
-      <div className="flex gap-2 mb-4">
-        {([['today', 'Hoy'], ['tomorrow', 'Mañana'], ['all', 'Todos']] as const).map(([k, l]) => (
+      {/* Filtro principal */}
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        {([['today', 'Hoy'], ['tomorrow', 'Mañana'], ['all', 'Todos'], ['delivered', 'Entregados']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
-            className="px-4 py-1.5 rounded-xl text-sm font-medium cursor-pointer"
+            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-medium cursor-pointer"
             style={{
               background: filter === k ? 'var(--accent2)' : 'var(--surface2)',
               color: filter === k ? 'var(--bg)' : 'var(--muted)',
@@ -120,12 +129,31 @@ export default function AgendaTab() {
         ))}
       </div>
 
+      {/* Subfiltro de entregados */}
+      {filter === 'delivered' && (
+        <div className="flex gap-2 mb-4">
+          {([['today', 'Hoy'], ['yesterday', 'Ayer'], ['all', 'Todos']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setDeliveredScope(k)}
+              className="px-3 py-1 rounded-lg text-xs font-medium cursor-pointer"
+              style={{
+                background: deliveredScope === k ? 'rgba(34,197,94,0.15)' : 'var(--surface2)',
+                color: deliveredScope === k ? '#22c55e' : 'var(--muted)',
+                border: '1px solid var(--border)',
+              }}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <p className="text-center py-12 text-sm" style={{ color: 'var(--muted)' }}>Cargando...</p>
       ) : visible.length === 0 ? (
         <div className="text-center py-16">
           <Package size={36} className="mx-auto mb-3" style={{ color: 'var(--muted)' }} />
-          <p style={{ color: 'var(--muted)' }}>No hay pedidos para {filter === 'today' ? 'hoy' : filter === 'tomorrow' ? 'mañana' : 'mostrar'}</p>
+          <p style={{ color: 'var(--muted)' }}>
+            {filter === 'delivered' ? 'No hay pedidos entregados aquí' : `No hay pedidos para ${filter === 'today' ? 'hoy' : filter === 'tomorrow' ? 'mañana' : 'mostrar'}`}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
