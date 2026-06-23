@@ -91,7 +91,12 @@ export default function HorarioTab() {
     dragging.current = true
     applyCell(time)
   }
-  function onCellEnter(time: string) { if (dragging.current) applyCell(time) }
+  function onGridMove(e: React.PointerEvent) {
+    if (!dragging.current) return
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+    const t = el?.dataset?.time
+    if (t) applyCell(t)
+  }
 
   async function toggleWholeDay(date: string) {
     if (isWholeDayClosed(date)) {
@@ -159,25 +164,23 @@ export default function HorarioTab() {
       {/* Submenú de franjas del día seleccionado */}
       {selDay && (
         <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <button type="button" onClick={() => toggleWholeDay(selDay)} className="flex items-center gap-2 cursor-pointer select-none w-full">
             <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
                   style={{ background: selWholeClosed ? 'var(--danger)' : 'transparent', border: `2px solid ${selWholeClosed ? 'var(--danger)' : 'var(--muted)'}` }}>
               {selWholeClosed && <Check size={13} strokeWidth={3} style={{ color: 'var(--bg)' }} />}
             </span>
-            <input type="checkbox" checked={selWholeClosed} onChange={() => toggleWholeDay(selDay)} className="hidden" />
             <span className="text-sm font-medium" style={{ color: selWholeClosed ? 'var(--danger)' : 'var(--accent2)' }}>Cerrar todo el día</span>
-          </label>
+          </button>
 
           {!selWholeClosed && (
             <>
               <p className="text-xs" style={{ color: 'var(--muted)' }}>Toca una hora para cerrarla, o mantén pulsado y arrastra para marcar varias.</p>
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5" style={{ touchAction: 'none' }}>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5" style={{ touchAction: 'none' }} onPointerMove={onGridMove}>
                 {slots.map(t => {
                   const closed = localClosed.has(t)
                   return (
-                    <div key={t}
-                      onPointerDown={(e) => { e.preventDefault(); onCellDown(t) }}
-                      onPointerEnter={() => onCellEnter(t)}
+                    <div key={t} data-time={t}
+                      onPointerDown={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId); onCellDown(t) }}
                       className="px-1 py-2.5 rounded-lg text-xs font-medium text-center cursor-pointer select-none"
                       style={{
                         background: closed ? 'rgba(239,68,68,0.18)' : 'var(--surface2)',
