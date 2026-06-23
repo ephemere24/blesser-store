@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, ClipboardList } from 'lucide-react'
 import AgendaTab from './AgendaTab'
 import HorarioTab from './HorarioTab'
+import HistorialTab from './HistorialTab'
 
 interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
@@ -163,7 +164,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [rememberAdmin, setRememberAdmin] = useState(true)
-  const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario'>('agenda')
+  const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario' | 'historial'>('agenda')
   const [products, setProducts] = useState<Product[]>([])
   const [codes, setCodes] = useState<AccessCode[]>([])
   const [modal, setModal] = useState<{ open: boolean; product: typeof emptyProduct & { id?: number } }>({
@@ -389,8 +390,9 @@ export default function AdminPage() {
             { key: 'products', label: 'Productos', icon: Package },
             { key: 'codes', label: 'Códigos', icon: Users },
             { key: 'horario', label: 'Horario', icon: Clock },
+            { key: 'historial', label: 'Pedidos', icon: ClipboardList },
           ].map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key as 'agenda' | 'products' | 'codes' | 'horario')}
+            <button key={key} onClick={() => setTab(key as 'agenda' | 'products' | 'codes' | 'horario' | 'historial')}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer shrink-0"
               style={{
                 background: tab === key ? 'var(--accent2)' : 'var(--surface2)',
@@ -407,6 +409,9 @@ export default function AdminPage() {
 
         {/* HORARIO */}
         {tab === 'horario' && <HorarioTab />}
+
+        {/* HISTORIAL */}
+        {tab === 'historial' && <HistorialTab />}
 
         {/* PRODUCTOS */}
         {tab === 'products' && (
