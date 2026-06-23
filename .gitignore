@@ -49,6 +49,7 @@ public/uploads/*
 !public/uploads/.gitkeep
 backup-data.json
 
-.agents/
+.agents/*
+!.agents/skills/
 .claude/
 skills-lock.json
