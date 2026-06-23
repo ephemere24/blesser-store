@@ -25,7 +25,11 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { id } = await req.json()
-  await prisma.order.delete({ where: { id } })
+  const { id, ids } = await req.json()
+  if (Array.isArray(ids) && ids.length > 0) {
+    await prisma.order.deleteMany({ where: { id: { in: ids } } })
+  } else if (id) {
+    await prisma.order.delete({ where: { id } })
+  }
   return NextResponse.json({ ok: true })
 }
