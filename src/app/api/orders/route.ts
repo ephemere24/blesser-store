@@ -76,6 +76,18 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Validar unidades de oferta (liquidación por unidades)
+  for (const i of cart.items) {
+    if (isSaleActive(i.product) && i.product.saleUnits != null) {
+      if (i.quantity > i.product.saleUnits) {
+        return NextResponse.json(
+          { error: `Solo quedan ${i.product.saleUnits} unidad${i.product.saleUnits === 1 ? '' : 'es'} en oferta de ${i.product.name}` },
+          { status: 409 }
+        )
+      }
+    }
+  }
+
   const accessCode = await prisma.accessCode.findUnique({ where: { id: user.codeId } })
   const total = cart.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0)
 

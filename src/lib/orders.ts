@@ -99,6 +99,12 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
       const qty = Math.max(1, Math.floor(edit.quantity))
       const product = await prisma.product.findUnique({ where: { id: edit.productId } })
       if (!product) throw new OrderEditError('Producto no encontrado', 404)
+      if (isSaleActive(product) && product.saleUnits != null && qty > product.saleUnits) {
+        throw new OrderEditError(
+          `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}.`,
+          409
+        )
+      }
       let flavorName: string | null = null
       if (edit.flavorId) {
         const flavor = await prisma.flavor.findUnique({ where: { id: edit.flavorId } })

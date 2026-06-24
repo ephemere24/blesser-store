@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
+import { isSaleActive } from '@/lib/price'
 
 async function getCart(codeId: number) {
   return prisma.cart.upsert({
@@ -42,13 +43,27 @@ export async function POST(req: NextRequest) {
     where: { cartId_productId_flavorId: { cartId: cart.id, productId, flavorId: flavorId ?? null } },
   })
 
+  const product = await prisma.product.findUnique({ where: { id: productId } })
+  if (!product) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
+
+  const wanted = (existing?.quantity ?? 0) + quantity
+
   // Validar stock disponible del sabor (si se ha seleccionado uno)
   if (flavorId) {
     const flavor = await prisma.flavor.findUnique({ where: { id: flavorId } })
-    const wanted = (existing?.quantity ?? 0) + quantity
     if (!flavor || flavor.stock < wanted) {
       return NextResponse.json(
         { error: 'No hay stock suficiente de este sabor.' },
+        { status: 409 }
+      )
+    }
+  }
+
+  // Validar unidades de oferta (liquidación por unidades)
+  if (isSaleActive(product) && product.saleUnits != null) {
+    if (wanted > product.saleUnits) {
+      return NextResponse.json(
+        { error: `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}` },
         { status: 409 }
       )
     }
@@ -88,6 +103,15 @@ export async function PATCH(req: NextRequest) {
       if (!flavor || flavor.stock < quantity) {
         return NextResponse.json(
           { error: 'No hay stock suficiente de este sabor.' },
+          { status: 409 }
+        )
+      }
+    }
+    if (item?.productId) {
+      const product = await prisma.product.findUnique({ where: { id: item.productId } })
+      if (product && isSaleActive(product) && product.saleUnits != null && quantity > product.saleUnits) {
+        return NextResponse.json(
+          { error: `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}` },
           { status: 409 }
         )
       }

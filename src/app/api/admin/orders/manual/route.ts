@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
       if (!f) return NextResponse.json({ error: 'Sabor no encontrado' }, { status: 404 })
       flavorName = f.name
     }
+    if (isSaleActive(product) && product.saleUnits != null && it.quantity > product.saleUnits) {
+      return NextResponse.json(
+        { error: `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}` },
+        { status: 409 }
+      )
+    }
     lines.push({ productId: it.productId, flavorId: it.flavorId, productName: product.name, flavorName, price: effectivePrice(product), onSale: isSaleActive(product), quantity: it.quantity })
   }
   const total = lines.reduce((s, l) => s + l.price * l.quantity, 0)
