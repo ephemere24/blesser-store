@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, ClipboardList, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, BarChart3, Search } from 'lucide-react'
 import AgendaTab from './AgendaTab'
 import HorarioTab from './HorarioTab'
-import HistorialTab from './HistorialTab'
+import FacturacionTab from './FacturacionTab'
 import { makeFuse, searchProducts } from '@/lib/search'
 
 interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
@@ -166,7 +166,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [rememberAdmin, setRememberAdmin] = useState(true)
-  const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario' | 'historial'>('agenda')
+  const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario' | 'facturacion'>('agenda')
   const [products, setProducts] = useState<Product[]>([])
   const [prodQuery, setProdQuery] = useState('')
   const prodFuse = useMemo(() => makeFuse(products), [products])
@@ -396,9 +396,9 @@ export default function AdminPage() {
             { key: 'products', label: 'Productos', icon: Package },
             { key: 'codes', label: 'Códigos', icon: Users },
             { key: 'horario', label: 'Horario', icon: Clock },
-            { key: 'historial', label: 'Pedidos', icon: ClipboardList },
+            { key: 'facturacion', label: 'Facturación', icon: BarChart3 },
           ].map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key as 'agenda' | 'products' | 'codes' | 'horario' | 'historial')}
+            <button key={key} onClick={() => setTab(key as 'agenda' | 'products' | 'codes' | 'horario' | 'facturacion')}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer shrink-0"
               style={{
                 background: tab === key ? 'var(--accent2)' : 'var(--surface2)',
@@ -416,8 +416,8 @@ export default function AdminPage() {
         {/* HORARIO */}
         {tab === 'horario' && <HorarioTab />}
 
-        {/* HISTORIAL */}
-        {tab === 'historial' && <HistorialTab />}
+        {/* FACTURACIÓN */}
+        {tab === 'facturacion' && <FacturacionTab products={products} />}
 
         {/* PRODUCTOS */}
         {tab === 'products' && (

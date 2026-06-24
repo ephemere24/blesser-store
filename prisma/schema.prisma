@@ -59,6 +59,33 @@ model Product {
   updatedAt   DateTime @updatedAt
   flavors     Flavor[]
   cartItems   CartItem[]
+  purchases   Purchase[]
+}
+
+// Lote de compra de un producto. El coste/unidad se calcula como
+// (productCost + shipping + insurance + otherCosts) / units.
+model Purchase {
+  id          Int      @id @default(autoincrement())
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   Int
+  units       Int
+  productCost Float    // coste del producto en este lote (total, no por unidad)
+  shipping    Float    @default(0)
+  insurance   Float    @default(0)
+  otherCosts  Float    @default(0)
+  note        String?
+  date        String   // YYYY-MM-DD
+  createdAt   DateTime @default(now())
+}
+
+// Gasto general no ligado a un producto concreto.
+model Expense {
+  id          Int      @id @default(autoincrement())
+  category    String
+  amount      Float
+  description String?
+  date        String   // YYYY-MM-DD
+  createdAt   DateTime @default(now())
 }
 
 model Flavor {
