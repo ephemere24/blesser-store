@@ -22,8 +22,8 @@ interface CartItem {
   id: number; productId: number; flavorId: number | null; quantity: number; product: Product; flavor: Flavor | null
 }
 interface Cart { items: CartItem[] }
-interface OrderItem { id: number; productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
-interface DraftLine { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
+interface OrderItem { id: number; productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }
+interface DraftLine { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }
 interface Order {
   id: number; total: number; status: string; note: string | null; pendingChanges: boolean
   pickupDate: string | null; pickupTime: string | null; items: OrderItem[]
@@ -66,7 +66,7 @@ export default function StorePage() {
   const orderItems: DraftLine[] = activeOrder
     ? (dirty && activeOrder.draftItems
         ? activeOrder.draftItems
-        : activeOrder.items.map(i => ({ productId: i.productId!, flavorId: i.flavorId, productName: i.productName, flavorName: i.flavorName, price: i.price, quantity: i.quantity })))
+        : activeOrder.items.map(i => ({ productId: i.productId!, flavorId: i.flavorId, productName: i.productName, flavorName: i.flavorName, price: i.price, onSale: i.onSale, quantity: i.quantity })))
     : []
   const oDate = activeOrder ? (dirty ? (activeOrder.draftPickupDate || activeOrder.pickupDate) : activeOrder.pickupDate) : null
   const oTime = activeOrder ? (dirty ? (activeOrder.draftPickupTime || activeOrder.pickupTime) : activeOrder.pickupTime) : null
@@ -497,27 +497,29 @@ export default function StorePage() {
                       El pedido está vacío. Añade productos desde el catálogo.
                     </p>
                   ) : orderItems.map(item => (
-                    <div key={`${item.productId}:${item.flavorId}`} className="flex gap-3 p-3 rounded-xl"
+                    <div key={`${item.productId}:${item.flavorId}:${item.onSale ? 1 : 0}`} className="flex gap-3 p-3 rounded-xl"
                          style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{item.productName}</p>
                         {item.flavorName && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavorName}</p>}
-                        <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * item.price).toFixed(2)} €</p>
+                        <p className="text-xs mt-1 font-semibold" style={{ color: item.onSale ? '#f87171' : 'var(--accent)' }}>
+                          {(item.quantity * item.price).toFixed(2)} €{item.onSale && ' · oferta'}
+                        </p>
                         <div className="flex items-center gap-2 mt-2">
-                          <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', productId: item.productId, flavorId: item.flavorId, quantity: item.quantity - 1 })}
+                          <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', productId: item.productId, flavorId: item.flavorId, onSale: item.onSale, quantity: item.quantity - 1 })}
                                   className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Minus size={15} />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--accent2)' }}>{item.quantity}</span>
-                          <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', productId: item.productId, flavorId: item.flavorId, quantity: item.quantity + 1 })}
+                          <button disabled={busy} onClick={() => orderPatch({ op: 'setQty', productId: item.productId, flavorId: item.flavorId, onSale: item.onSale, quantity: item.quantity + 1 })}
                                   className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-50"
                                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }}>
                             <Plus size={15} />
                           </button>
                         </div>
                       </div>
-                      <button disabled={busy} onClick={() => orderPatch({ op: 'removeItem', productId: item.productId, flavorId: item.flavorId })}
+                      <button disabled={busy} onClick={() => orderPatch({ op: 'removeItem', productId: item.productId, flavorId: item.flavorId, onSale: item.onSale })}
                               className="self-start p-2 rounded-lg cursor-pointer disabled:opacity-50" style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}>
                         <Trash2 size={15} />
                       </button>

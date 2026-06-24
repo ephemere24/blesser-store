@@ -8,8 +8,8 @@ import { effectivePrice, isSaleActive } from '@/lib/price'
 
 type ClientOp =
   | { op: 'addItem'; productId: number; flavorId: number | null; quantity?: number }
-  | { op: 'setQty'; productId: number; flavorId: number | null; quantity: number }
-  | { op: 'removeItem'; productId: number; flavorId: number | null }
+  | { op: 'setQty'; productId: number; flavorId: number | null; quantity: number; onSale?: boolean }
+  | { op: 'removeItem'; productId: number; flavorId: number | null; onSale?: boolean }
   | { op: 'setPickup'; pickupDate: string; pickupTime: string }
   | { op: 'confirm' }
   | { op: 'cancel' }
@@ -88,31 +88,36 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       flavorName = f.name
     }
     const qty = Math.max(1, Math.floor(body.quantity ?? 1))
-    const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null))
-    // Si la línea ya existe en el draft (precio fijo), simplemente incrementamos cantidad.
-    // Si es nueva, calculamos precio según estado actual de oferta.
-    if (idx >= 0) {
-      draft[idx].quantity += qty
-    } else {
-      const onSale = isSaleActive(product)
-      // Validar saleUnits solo para unidades nuevas a precio de oferta
-      if (onSale && product.saleUnits != null && qty > product.saleUnits) {
+    const onSale = isSaleActive(product)
+    // Las unidades nuevas se evalúan según el estado de oferta ACTUAL.
+    // Una línea de oferta y otra a precio normal del mismo producto conviven separadas.
+    if (onSale && product.saleUnits != null) {
+      // Unidades en oferta de este producto ya en el borrador
+      const draftOnSale = draft.filter(d => d.productId === body.productId && d.onSale).reduce((s, d) => s + d.quantity, 0)
+      // Unidades en oferta ya descontadas por el pedido original (no cuentan contra el restante)
+      const origOnSale = order.items.filter(i => i.productId === body.productId && i.onSale).reduce((s, i) => s + i.quantity, 0)
+      // Unidades nuevas en oferta que se intentan añadir = (borrador + esta) - original
+      const newOnSale = (draftOnSale + qty) - origOnSale
+      if (newOnSale > product.saleUnits) {
+        const avail = Math.max(0, product.saleUnits - Math.max(0, draftOnSale - origOnSale))
         return NextResponse.json(
-          { error: `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}` },
+          { error: `Solo quedan ${avail} unidad${avail === 1 ? '' : 'es'} en oferta de ${product.name}` },
           { status: 409 }
         )
       }
-      draft.push({ productId: body.productId, flavorId: body.flavorId ?? null, productName: product.name, flavorName, price: effectivePrice(product), onSale, quantity: qty })
     }
+    const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null) && d.onSale === onSale)
+    if (idx >= 0) draft[idx].quantity += qty
+    else draft.push({ productId: body.productId, flavorId: body.flavorId ?? null, productName: product.name, flavorName, price: effectivePrice(product), onSale, quantity: qty })
   } else if (body.op === 'setQty') {
-    const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null))
+    const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null) && (body.onSale === undefined || d.onSale === body.onSale))
     if (idx >= 0) {
       const q = Math.max(0, Math.floor(body.quantity))
       if (q <= 0) draft.splice(idx, 1)
       else draft[idx].quantity = q
     }
   } else if (body.op === 'removeItem') {
-    const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null))
+    const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null) && (body.onSale === undefined || d.onSale === body.onSale))
     if (idx >= 0) draft.splice(idx, 1)
   }
 

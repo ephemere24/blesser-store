@@ -255,15 +255,15 @@ export async function applyOrderSave(
     if (it.onSale && it.productId) curSaleByProduct.set(it.productId, (curSaleByProduct.get(it.productId) || 0) + it.quantity)
   }
 
-  // Fusionar líneas deseadas por producto+sabor
+  // Fusionar líneas deseadas por producto+sabor+oferta (oferta y no-oferta van separadas)
   const mergedMap = new Map<string, DesiredItem>()
   for (const d of desired) {
     const q = Math.max(0, Math.floor(d.quantity))
     if (q <= 0) continue
-    const key = `${d.productId}:${d.flavorId ?? 'null'}`
+    const key = `${d.productId}:${d.flavorId ?? 'null'}:${d.onSale ? 1 : 0}`
     const ex = mergedMap.get(key)
     if (ex) ex.quantity += q
-    else mergedMap.set(key, { productId: d.productId, flavorId: d.flavorId ?? null, quantity: q })
+    else mergedMap.set(key, { productId: d.productId, flavorId: d.flavorId ?? null, quantity: q, price: d.price, onSale: d.onSale })
   }
   const mergedDesired = [...mergedMap.values()]
 
