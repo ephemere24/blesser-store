@@ -227,6 +227,27 @@ export default function StorePage() {
     guardedNav(async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/') })
   }
 
+  // Cantidad actual de un producto+sabor en el carrito o pedido
+  function cardQty(productId: number, flavorId: number | null): number {
+    if (activeOrder) return orderItems.filter(i => i.productId === productId && i.flavorId === flavorId).reduce((s, i) => s + i.quantity, 0)
+    return cart?.items.find(i => i.productId === productId && i.flavorId === (flavorId ?? null))?.quantity ?? 0
+  }
+
+  // Decremento desde la tarjeta: quita 1 unidad (primero de línea non-sale, luego de sale)
+  async function removeOneFromCard(productId: number, flavorId: number | null) {
+    if (activeOrder) {
+      const lines = orderItems.filter(i => i.productId === productId && i.flavorId === flavorId)
+      const target = lines.find(i => !i.onSale) ?? lines[0]
+      if (!target) return
+      await orderPatch({ op: 'setQty', productId, flavorId, onSale: target.onSale, quantity: target.quantity - 1 })
+    } else {
+      const item = cart?.items.find(i => i.productId === productId && i.flavorId === (flavorId ?? null))
+      if (!item) return
+      if (item.quantity <= 1) await removeFromCart(item.id)
+      else await updateCartQuantity(item.id, item.quantity - 1)
+    }
+  }
+
   const cartCount = cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
   const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0) ?? 0
   const orderCount = orderItems.reduce((s, i) => s + i.quantity, 0)
@@ -373,16 +394,37 @@ export default function StorePage() {
                       </div>
                     )}
 
-                    <button
-                      onClick={() => addProduct(product.id)}
-                      disabled={addingId === product.id || inStockFlavors.length === 0}
-                      className="mt-auto w-full py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 cursor-pointer"
-                      style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                      {justAddedId === product.id ? '✓ Añadido'
-                        : addingId === product.id ? 'Añadiendo...'
-                        : inStockFlavors.length === 0 ? 'Sin stock'
-                        : activeOrder ? 'Añadir a mi pedido' : 'Añadir al carrito'}
-                    </button>
+                    {(() => {
+                      const qty = cardQty(product.id, selected)
+                      if (qty > 0) return (
+                        <div className="mt-auto flex items-center justify-between gap-2 p-1 rounded-xl"
+                             style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                          <button onClick={() => removeOneFromCard(product.id, selected)} disabled={busy || addingId === product.id}
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors"
+                                  style={{ background: 'var(--surface)', color: 'var(--accent2)' }}>
+                            <Minus size={15} />
+                          </button>
+                          <span className="font-bold text-sm" style={{ color: 'var(--accent2)' }}>{qty}</span>
+                          <button onClick={() => addProduct(product.id)} disabled={busy || addingId === product.id}
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors"
+                                  style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                            <Plus size={15} />
+                          </button>
+                        </div>
+                      )
+                      return (
+                        <button
+                          onClick={() => addProduct(product.id)}
+                          disabled={addingId === product.id || inStockFlavors.length === 0}
+                          className="mt-auto w-full py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 cursor-pointer"
+                          style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+                          {justAddedId === product.id ? '✓ Añadido'
+                            : addingId === product.id ? 'Añadiendo...'
+                            : inStockFlavors.length === 0 ? 'Sin stock'
+                            : activeOrder ? 'Añadir a mi pedido' : 'Añadir al carrito'}
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               )
