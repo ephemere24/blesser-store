@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { isValidPickup, formatDayLabel } from '@/lib/pickup'
-import { effectivePrice } from '@/lib/price'
+import { effectivePrice, isSaleActive } from '@/lib/price'
+import { consumeSaleUnits } from '@/lib/orders'
 
 async function notifyTelegram(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
             productName: i.product.name,
             flavorName: i.flavor?.name ?? null,
             price: effectivePrice(i.product),
-            onSale: i.product.onSale,
+            onSale: isSaleActive(i.product),
             quantity: i.quantity,
           })),
         },
@@ -116,6 +117,9 @@ export async function POST(req: NextRequest) {
     await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
     return created
   })
+
+  // Descontar unidades de oferta (liquidación por unidades)
+  await consumeSaleUnits(order.items)
 
   // Notificar por Telegram
   const clientLabel = accessCode?.clientName

@@ -12,7 +12,7 @@ interface Flavor { id: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
-  onSale: boolean; salePrice: number | null; saleEndsAt: string | null
+  onSale: boolean; salePrice: number | null; saleEndsAt: string | null; saleUnits: number | null
 }
 
 function ImageGallery({ images, name, category }: { images: string[]; name: string; category: string }) {
@@ -223,6 +223,11 @@ export default function ProductPage() {
               </span>
               {isSaleActive(product) && product.saleEndsAt && (
                 <SaleCountdown endsAt={product.saleEndsAt} size="md" onExpire={() => setSaleTick(t => t + 1)} />
+              )}
+              {isSaleActive(product) && product.saleUnits != null && (
+                <span className="text-xs font-semibold" style={{ color: '#f87171' }}>
+                  ¡Solo quedan {product.saleUnits} a este precio!
+                </span>
               )}
             </div>
           )}

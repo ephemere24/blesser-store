@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAdminToken } from '@/lib/auth'
-import { effectivePrice } from '@/lib/price'
+import { effectivePrice, isSaleActive } from '@/lib/price'
+import { consumeSaleUnits } from '@/lib/orders'
 
 function requireAdmin(req: NextRequest) {
   const token = req.cookies.get('bs_admin')?.value
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
       if (!f) return NextResponse.json({ error: 'Sabor no encontrado' }, { status: 404 })
       flavorName = f.name
     }
-    lines.push({ productId: it.productId, flavorId: it.flavorId, productName: product.name, flavorName, price: effectivePrice(product), onSale: product.onSale, quantity: it.quantity })
+    lines.push({ productId: it.productId, flavorId: it.flavorId, productName: product.name, flavorName, price: effectivePrice(product), onSale: isSaleActive(product), quantity: it.quantity })
   }
   const total = lines.reduce((s, l) => s + l.price * l.quantity, 0)
 
@@ -76,6 +77,8 @@ export async function POST(req: NextRequest) {
     }
     return created
   })
+
+  await consumeSaleUnits(order.items)
 
   return NextResponse.json({ ok: true, order })
 }

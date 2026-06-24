@@ -2,7 +2,20 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { sendMessage } from '@/lib/telegram'
 import { formatDayLabel } from '@/lib/pickup'
-import { effectivePrice } from '@/lib/price'
+import { effectivePrice, isSaleActive } from '@/lib/price'
+
+// Descuenta las unidades de oferta de los productos vendidos en liquidación.
+// Cuando saleUnits llega a 0 la oferta deja de estar activa automáticamente.
+export async function consumeSaleUnits(lines: { productId: number | null; onSale: boolean; quantity: number }[]) {
+  const byProd = new Map<number, number>()
+  for (const l of lines) if (l.onSale && l.productId) byProd.set(l.productId, (byProd.get(l.productId) || 0) + l.quantity)
+  for (const [pid, qty] of byProd) {
+    const p = await prisma.product.findUnique({ where: { id: pid } })
+    if (p && p.saleUnits != null) {
+      await prisma.product.update({ where: { id: pid }, data: { saleUnits: Math.max(0, p.saleUnits - qty) } })
+    }
+  }
+}
 
 export type EditOp =
   | { op: 'setQty'; itemId: number; quantity: number }
@@ -106,10 +119,11 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
             productName: product.name,
             flavorName,
             price: effectivePrice(product),
-            onSale: product.onSale,
+            onSale: isSaleActive(product),
             quantity: qty,
           },
         })
+        if (isSaleActive(product)) await consumeSaleUnits([{ productId: product.id, onSale: true, quantity: qty }])
       }
       break
     }
@@ -261,7 +275,7 @@ export async function applyOrderSave(
     }
     lineData.push({
       orderId, productId: d.productId, flavorId: d.flavorId,
-      productName: product.name, flavorName, price: effectivePrice(product), onSale: product.onSale, quantity: d.quantity,
+      productName: product.name, flavorName, price: effectivePrice(product), onSale: isSaleActive(product), quantity: d.quantity,
     })
   }
   const total = lineData.reduce((s, l) => s + l.price * l.quantity, 0)

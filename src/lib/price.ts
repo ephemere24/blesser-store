@@ -3,12 +3,14 @@ export type Priceable = {
   onSale?: boolean | null
   salePrice?: number | null
   saleEndsAt?: string | Date | null
+  saleUnits?: number | null
 }
 
-// ¿La liquidación está activa ahora mismo? (respeta la fecha de fin si es temporal)
+// ¿La liquidación está activa ahora mismo? (respeta fecha de fin y unidades restantes)
 export function isSaleActive(p: Priceable, now: Date = new Date()): boolean {
   if (!p.onSale || p.salePrice == null) return false
   if (p.saleEndsAt && new Date(p.saleEndsAt).getTime() <= now.getTime()) return false
+  if (p.saleUnits != null && p.saleUnits <= 0) return false
   return true
 }
 

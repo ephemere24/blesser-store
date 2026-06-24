@@ -11,14 +11,14 @@ interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; visible: boolean; position: number
-  images: string; flavors: Flavor[]; onSale: boolean; salePrice: number | null; saleEndsAt: string | null
+  images: string; flavors: Flavor[]; onSale: boolean; salePrice: number | null; saleEndsAt: string | null; saleUnits: number | null
 }
 interface AccessCode { id: number; code: string; clientName: string | null; phone?: string | null; active: boolean }
 
 const emptyProduct = {
   name: '', price: 0, description: '', specs: '', category: '',
   visible: true, position: 0, images: '[]', flavors: [] as Flavor[],
-  onSale: false, salePrice: null as number | null, saleEndsAt: null as string | null,
+  onSale: false, salePrice: null as number | null, saleEndsAt: null as string | null, saleUnits: null as number | null,
 }
 
 function ImageManager({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
@@ -667,6 +667,26 @@ export default function AdminPage() {
                   </div>
                 )
               })()}
+
+              {modal.product.onSale && (
+                <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={modal.product.saleUnits != null}
+                      onChange={e => setModal(m => ({ ...m, product: { ...m.product, saleUnits: e.target.checked ? 10 : null } }))} />
+                    <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>Oferta por unidades limitadas</span>
+                  </label>
+                  {modal.product.saleUnits != null && (
+                    <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Unidades en oferta</span>
+                      <input type="number" min={0} value={modal.product.saleUnits}
+                        onChange={e => setModal(m => ({ ...m, product: { ...m.product, saleUnits: Math.max(0, Math.floor(Number(e.target.value) || 0)) } }))}
+                        className="w-20 px-2 py-1.5 rounded-lg text-sm text-center outline-none"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>restantes (la oferta termina al llegar a 0)</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Imágenes */}
