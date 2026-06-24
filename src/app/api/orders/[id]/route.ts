@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { applyOrderEdit, confirmOrderDraft, draftFromOrder, notifyOrderChange, OrderEditError, DraftLine } from '@/lib/orders'
 import { isValidPickup } from '@/lib/pickup'
+import { effectivePrice, isSaleActive } from '@/lib/price'
 
 type ClientOp =
   | { op: 'addItem'; productId: number; flavorId: number | null; quantity?: number }
@@ -88,8 +89,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     const qty = Math.max(1, Math.floor(body.quantity ?? 1))
     const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null))
-    if (idx >= 0) draft[idx].quantity += qty
-    else draft.push({ productId: body.productId, flavorId: body.flavorId ?? null, productName: product.name, flavorName, price: product.price, quantity: qty })
+    // Si la línea ya existe en el draft (precio fijo), simplemente incrementamos cantidad.
+    // Si es nueva, calculamos precio según estado actual de oferta.
+    if (idx >= 0) {
+      draft[idx].quantity += qty
+    } else {
+      const onSale = isSaleActive(product)
+      // Validar saleUnits solo para unidades nuevas a precio de oferta
+      if (onSale && product.saleUnits != null && qty > product.saleUnits) {
+        return NextResponse.json(
+          { error: `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}` },
+          { status: 409 }
+        )
+      }
+      draft.push({ productId: body.productId, flavorId: body.flavorId ?? null, productName: product.name, flavorName, price: effectivePrice(product), onSale, quantity: qty })
+    }
   } else if (body.op === 'setQty') {
     const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null))
     if (idx >= 0) {

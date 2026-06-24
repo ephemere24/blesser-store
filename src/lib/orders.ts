@@ -201,16 +201,16 @@ export async function notifyOrderChange(order: OrderForNotify, clientLabel: stri
   await sendMessage(msg)
 }
 
-export type DesiredItem = { productId: number; flavorId: number | null; quantity: number }
-export type DraftLine = { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }
+export type DesiredItem = { productId: number; flavorId: number | null; quantity: number; price?: number; onSale?: boolean }
+export type DraftLine = { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }
 
 type OrderWithItems = { items: { productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }[] }
 
-// Borrador inicial = copia de las líneas reales del pedido
+// Borrador inicial = copia de las líneas reales del pedido (precios y onSale fijos)
 export function draftFromOrder(order: OrderWithItems): DraftLine[] {
   return order.items.map(i => ({
     productId: i.productId!, flavorId: i.flavorId, productName: i.productName,
-    flavorName: i.flavorName, price: i.price, quantity: i.quantity,
+    flavorName: i.flavorName, price: i.price, onSale: i.onSale, quantity: i.quantity,
   }))
 }
 
@@ -221,7 +221,7 @@ export async function confirmOrderDraft(orderId: number) {
   const draft = (order.draftItems as unknown as DraftLine[] | null) ?? null
   if (!draft) return prisma.order.findUnique({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } }, accessCode: true } })
 
-  const desired: DesiredItem[] = draft.map(d => ({ productId: d.productId, flavorId: d.flavorId, quantity: d.quantity }))
+  const desired: DesiredItem[] = draft.map(d => ({ productId: d.productId, flavorId: d.flavorId, quantity: d.quantity, price: d.price, onSale: d.onSale }))
   const pickupDate = order.draftPickupDate ?? order.pickupDate ?? undefined
   const pickupTime = order.draftPickupTime ?? order.pickupTime ?? undefined
   await applyOrderSave(orderId, desired, pickupDate && pickupTime ? { pickupDate, pickupTime } : undefined)
@@ -298,11 +298,13 @@ export async function applyOrderSave(
       if (!f) throw new OrderEditError('Sabor no encontrado', 404)
       flavorName = f.name
     }
-    const onSale = isSaleActive(product)
+    // Preservar precio y onSale del draft si existen; recalcular solo para líneas nuevas sin precio guardado
+    const onSale = d.onSale ?? isSaleActive(product)
+    const price = d.price ?? effectivePrice(product)
     if (onSale) desSaleByProduct.set(d.productId, (desSaleByProduct.get(d.productId) || 0) + d.quantity)
     lineData.push({
       orderId, productId: d.productId, flavorId: d.flavorId,
-      productName: product.name, flavorName, price: effectivePrice(product), onSale, quantity: d.quantity,
+      productName: product.name, flavorName, price, onSale, quantity: d.quantity,
     })
   }
   const total = lineData.reduce((s, l) => s + l.price * l.quantity, 0)
