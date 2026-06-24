@@ -746,7 +746,8 @@ export default function StorePage() {
                   {/* Pago en efectivo: con cuánto paga (obligatorio) */}
                   <div>
                     <p className="text-xs mb-2 font-medium" style={{ color: 'var(--muted)' }}>
-                      ¿CON CUÁNTO VAS A PAGAR? <span style={{ color: 'var(--danger)' }}>*</span> <span className="font-normal">(solo efectivo)</span>
+                      ¿CON CUÁNTO VAS A PAGAR?
+                      <span className="block font-normal italic mt-0.5">Solo efectivo</span>
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       <button type="button" onClick={() => { setPayChoice('exact'); setCustomPay('') }}
