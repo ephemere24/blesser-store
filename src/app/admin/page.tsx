@@ -334,9 +334,9 @@ export default function AdminPage() {
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
       <div className="w-full max-w-sm">
         <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-               style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-            <span className="text-2xl font-black" style={{ color: 'var(--accent2)' }}>BS</span>
+          <div className="w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center"
+               style={{ border: '1px solid var(--border)' }}>
+            <img src="/logo.jpg" alt="Blesser Store" className="w-full h-full object-cover" />
           </div>
         </div>
         <h1 className="text-center text-xl font-bold mb-1" style={{ color: 'var(--accent2)' }}>Panel Admin</h1>
@@ -372,9 +372,9 @@ export default function AdminPage() {
       <header className="px-4 py-3 flex items-center justify-between"
               style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-               style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-            <span className="text-xs font-black" style={{ color: 'var(--accent2)' }}>BS</span>
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center"
+               style={{ border: '1px solid var(--border)' }}>
+            <img src="/logo.jpg" alt="Blesser Store" className="w-full h-full object-cover" />
           </div>
           <span className="font-semibold text-sm" style={{ color: 'var(--accent2)' }}>Admin Panel</span>
         </div>

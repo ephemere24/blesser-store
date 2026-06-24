@@ -272,9 +272,9 @@ export default function StorePage() {
       <header ref={headerRef} className="sticky top-0 z-40 px-4 py-3 flex items-center justify-between"
               style={{ background: 'rgba(10,10,10,0.9)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-               style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-            <span className="text-xs font-black" style={{ color: 'var(--accent2)' }}>BS</span>
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center"
+               style={{ border: '1px solid var(--border)' }}>
+            <img src="/logo.jpg" alt="Blesser Store" className="w-full h-full object-cover" />
           </div>
           <span className="font-semibold text-sm tracking-wide" style={{ color: 'var(--accent2)' }}>Blesser Store</span>
         </div>

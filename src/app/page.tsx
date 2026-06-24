@@ -122,9 +122,9 @@ export default function LoginPage() {
 
       <div className="w-full max-w-sm relative z-10">
         <div ref={logoRef} className="flex justify-center mb-10">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center"
-               style={{ background: 'var(--surface2)', border: '1px solid var(--border)', boxShadow: '0 0 40px rgba(255,255,255,0.05)' }}>
-            <span className="text-3xl font-black tracking-tighter" style={{ color: 'var(--accent2)' }}>BS</span>
+          <div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center"
+               style={{ border: '1px solid var(--border)', boxShadow: '0 0 40px rgba(255,255,255,0.05)' }}>
+            <img src="/logo.jpg" alt="Blesser Store" className="w-full h-full object-cover" />
           </div>
         </div>
 
