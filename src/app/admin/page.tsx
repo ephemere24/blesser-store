@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, ClipboardList } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, ClipboardList, Search } from 'lucide-react'
 import AgendaTab from './AgendaTab'
 import HorarioTab from './HorarioTab'
 import HistorialTab from './HistorialTab'
+import { makeFuse, searchProducts } from '@/lib/search'
 
 interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
@@ -167,6 +168,9 @@ export default function AdminPage() {
   const [rememberAdmin, setRememberAdmin] = useState(true)
   const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario' | 'historial'>('agenda')
   const [products, setProducts] = useState<Product[]>([])
+  const [prodQuery, setProdQuery] = useState('')
+  const prodFuse = useMemo(() => makeFuse(products), [products])
+  const filteredProducts = useMemo(() => searchProducts(prodFuse, products, prodQuery), [prodFuse, products, prodQuery])
   const [codes, setCodes] = useState<AccessCode[]>([])
   const [modal, setModal] = useState<{ open: boolean; product: typeof emptyProduct & { id?: number } }>({
     open: false, product: { ...emptyProduct }
@@ -420,7 +424,7 @@ export default function AdminPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold" style={{ color: 'var(--accent2)' }}>
-                Catálogo ({products.length})
+                Catálogo ({prodQuery.trim() ? `${filteredProducts.length}/${products.length}` : products.length})
               </h2>
               <button
                 onClick={() => setModal({ open: true, product: { ...emptyProduct } })}
@@ -430,8 +434,32 @@ export default function AdminPage() {
               </button>
             </div>
 
+            {/* Buscador */}
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl mb-4"
+                 style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <Search size={16} style={{ color: 'var(--muted)' }} />
+              <input
+                value={prodQuery}
+                onChange={e => setProdQuery(e.target.value)}
+                placeholder="Buscar por nombre, sabor, categoría, precio…"
+                className="flex-1 bg-transparent outline-none text-sm"
+                style={{ color: 'var(--accent2)' }}
+              />
+              {prodQuery && (
+                <button onClick={() => setProdQuery('')} className="p-1 rounded-lg cursor-pointer" style={{ color: 'var(--muted)' }}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-12">
+                <Search size={32} className="mx-auto mb-2" style={{ color: 'var(--muted)' }} />
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>No hay productos para «{prodQuery}»</p>
+              </div>
+            ) : (
             <div className="space-y-3">
-              {products.map(p => (
+              {filteredProducts.map(p => (
                 <div key={p.id} className="rounded-2xl p-4 flex items-center gap-4"
                      style={{ background: 'var(--surface)', border: `1px solid ${p.visible ? 'var(--border)' : 'rgba(255,255,255,0.05)'}`, opacity: p.visible ? 1 : 0.5 }}>
                   <div className="flex-1 min-w-0">
@@ -462,6 +490,7 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 

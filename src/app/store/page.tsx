@@ -3,13 +3,14 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
 import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
 import SiteBackground from '@/components/SiteBackground'
+import { makeFuse, searchProducts, splitHighlight } from '@/lib/search'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -46,10 +47,16 @@ export default function StorePage() {
   const [pickupDate, setPickupDate] = useState('')
   const [pickupTime, setPickupTime] = useState('')
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  const [showSuggest, setShowSuggest] = useState(false)
   const [cartStep, setCartStep] = useState<'items' | 'pickup'>('items')
   const [closures, setClosures] = useState<{ date: string; time: string | null }[]>([])
   const [, setSaleTick] = useState(0)
   const router = useRouter()
+
+  const fuse = useMemo(() => makeFuse(products), [products])
+  const filteredProducts = useMemo(() => searchProducts(fuse, products, query), [fuse, products, query])
+  const suggestions = useMemo(() => (query.trim() ? filteredProducts.slice(0, 5) : []), [filteredProducts, query])
 
   const closedDays = useMemo(() => closures.filter(c => !c.time).map(c => c.date), [closures])
   // Mostramos TODOS los días/franjas; los cerrados se ven en gris y no seleccionables.
@@ -318,16 +325,82 @@ export default function StorePage() {
           </div>
         )}
 
-        <h2 className="text-xl font-bold mb-6" style={{ color: 'var(--accent2)' }}>Catálogo</h2>
+        <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--accent2)' }}>Catálogo</h2>
+
+        {/* Buscador */}
+        {products.length > 0 && (
+          <div className="relative mb-6">
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl"
+                 style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <Search size={18} style={{ color: 'var(--muted)' }} />
+              <input
+                value={query}
+                onChange={e => { setQuery(e.target.value); setShowSuggest(true) }}
+                onFocus={() => setShowSuggest(true)}
+                onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                placeholder="Buscar por nombre, sabor, precio…"
+                className="flex-1 bg-transparent outline-none text-sm"
+                style={{ color: 'var(--accent2)' }}
+              />
+              {query && (
+                <button onClick={() => { setQuery(''); setShowSuggest(false) }}
+                        className="p-1 rounded-lg cursor-pointer" style={{ color: 'var(--muted)' }}>
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            {showSuggest && suggestions.length > 0 && (
+              <div className="absolute left-0 right-0 mt-2 rounded-xl overflow-hidden z-30"
+                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 40px rgba(0,0,0,0.55)' }}>
+                {suggestions.map(s => {
+                  const sImgs: string[] = JSON.parse(s.images || '[]')
+                  const sEff = effectivePrice(s)
+                  return (
+                    <button key={s.id} onMouseDown={e => e.preventDefault()}
+                            onClick={() => guardedNav(() => router.push(`/store/${s.id}`))}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-left cursor-pointer transition-colors"
+                            style={{ borderBottom: '1px solid var(--border)' }}>
+                      <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
+                           style={{ background: 'var(--surface2)' }}>
+                        {sImgs[0] ? <img src={sImgs[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-lg">💨</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>
+                          {splitHighlight(s.name, query).map((part, i) =>
+                            part.hit
+                              ? <span key={i} style={{ color: '#f87171', fontWeight: 700 }}>{part.text}</span>
+                              : <span key={i}>{part.text}</span>
+                          )}
+                        </p>
+                        <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>{s.category}</p>
+                      </div>
+                      <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--accent)' }}>{sEff}€</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {products.length === 0 ? (
           <div className="text-center py-20">
             <Package size={40} className="mx-auto mb-3" style={{ color: 'var(--muted)' }} />
             <p style={{ color: 'var(--muted)' }}>No hay productos disponibles</p>
           </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-20">
+            <Search size={40} className="mx-auto mb-3" style={{ color: 'var(--muted)' }} />
+            <p style={{ color: 'var(--muted)' }}>No se encontraron productos para «{query}»</p>
+            <button onClick={() => setQuery('')}
+                    className="mt-4 px-4 py-2 rounded-xl text-sm font-medium cursor-pointer"
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+              Limpiar búsqueda
+            </button>
+          </div>
         ) : (
           <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map(product => {
+            {filteredProducts.map(product => {
               const inStockFlavors = product.flavors.filter(f => f.inStock)
               const selected = selectedFlavors[product.id] ?? null
               const imgs: string[] = JSON.parse(product.images || '[]')
