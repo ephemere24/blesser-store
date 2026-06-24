@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json() as {
     items: ManualItem[]; customerName: string; customerPhone?: string
-    pickupDate: string; pickupTime: string; note?: string
+    pickupDate: string; pickupTime: string; note?: string; payWith?: number | null
   }
 
   const name = (body.customerName || '').trim()
@@ -57,6 +57,11 @@ export async function POST(req: NextRequest) {
   }
   const total = lines.reduce((s, l) => s + l.price * l.quantity, 0)
 
+  const pay: number | null = typeof body.payWith === 'number' && !isNaN(body.payWith) ? body.payWith : null
+  if (pay != null && pay < total) {
+    return NextResponse.json({ error: 'La cantidad con la que paga debe ser igual o mayor que el total' }, { status: 400 })
+  }
+
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
       data: {
@@ -65,6 +70,7 @@ export async function POST(req: NextRequest) {
         customerPhone: body.customerPhone?.trim() || null,
         total,
         note: body.note?.trim() || null,
+        payWith: pay,
         pickupDate: body.pickupDate,
         pickupTime: body.pickupTime,
         items: { create: lines },

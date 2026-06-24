@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { sendMessage } from '@/lib/telegram'
 import { formatDayLabel } from '@/lib/pickup'
 import { effectivePrice, isSaleActive } from '@/lib/price'
+import { changeFor } from '@/lib/cash'
 
 // Descuenta las unidades de oferta de los productos vendidos en liquidación.
 // Cuando saleUnits llega a 0 la oferta deja de estar activa automáticamente.
@@ -181,6 +182,7 @@ export async function notifyOrderModified(orderId: number, clientLabel: string, 
 
 type OrderForNotify = {
   id: number; total: number; pickupDate: string | null; pickupTime: string | null
+  payWith?: number | null
   items: { productName: string; flavorName: string | null; price: number; quantity: number }[]
 }
 
@@ -192,12 +194,19 @@ export async function notifyOrderChange(order: OrderForNotify, clientLabel: stri
   const pickup = order.pickupDate && order.pickupTime
     ? `${formatDayLabel(new Date(order.pickupDate + 'T00:00:00'))} a las ${order.pickupTime}`
     : '—'
+  const change = changeFor(order.total, order.payWith)
+  const payLine = order.payWith == null
+    ? '💵 <b>Pago exacto</b> (sin cambio)'
+    : change <= 0
+      ? `💵 Paga con <b>${order.payWith}€</b> (exacto)`
+      : `💵 Paga con <b>${order.payWith}€</b> → <b>cambio ${change.toFixed(2)}€</b>`
   const msg =
     `${title} <b>#${order.id}</b>\n\n` +
     `👤 Cliente: <b>${clientLabel}</b>\n` +
     `📅 Recogida: <b>${pickup}</b>\n\n` +
     `${lines.join('\n') || '(sin productos)'}\n\n` +
-    `💰 <b>Total: ${order.total.toFixed(2)} €</b>`
+    `💰 <b>Total: ${order.total.toFixed(2)} €</b>\n` +
+    `${payLine}`
   await sendMessage(msg)
 }
 

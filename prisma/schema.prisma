@@ -106,6 +106,7 @@ model Order {
   total         Float
   status        String      @default("pending")
   note           String?
+  payWith        Float?
   pickupDate     String?
   pickupTime     String?
   pendingChanges Boolean   @default(false)

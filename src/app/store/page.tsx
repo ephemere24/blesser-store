@@ -11,6 +11,7 @@ import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
 import SiteBackground from '@/components/SiteBackground'
 import { makeFuse, searchProducts, splitHighlight } from '@/lib/search'
+import { suggestedBills, changeFor } from '@/lib/cash'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -42,6 +43,9 @@ export default function StorePage() {
   const [justAddedId, setJustAddedId] = useState<number | null>(null)
   const [selectedFlavors, setSelectedFlavors] = useState<Record<number, number | null>>({})
   const [note, setNote] = useState('')
+  // Pago: null = sin elegir, 'exact' = pago exacto, número = con cuánto paga
+  const [payChoice, setPayChoice] = useState<number | 'exact' | null>(null)
+  const [customPay, setCustomPay] = useState('')
   const [placing, setPlacing] = useState(false)
   const [orderDone, setOrderDone] = useState(false)
   const [pickupDate, setPickupDate] = useState('')
@@ -214,14 +218,18 @@ export default function StorePage() {
   }
   async function placeOrder() {
     if (!pickupDate || !pickupTime) { alert('Selecciona el día y la hora de recogida'); return }
+    if (payChoice === null) { alert('Indica con cuánto vas a pagar'); return }
+    const payWith = payChoice === 'exact' ? null : payChoice
+    if (payWith != null && payWith < cartTotal) { alert('La cantidad con la que pagas debe ser igual o mayor que el total'); return }
     setPlacing(true)
     const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note: note.trim() || null, pickupDate, pickupTime }),
+      body: JSON.stringify({ note: note.trim() || null, payWith, pickupDate, pickupTime }),
     })
     if (res.ok) {
       const data = await res.json()
       setCart({ items: [] }); setNote(''); setPickupDate(''); setPickupTime(''); setCartStep('items')
+      setPayChoice(null); setCustomPay('')
       setActiveOrder(data.order)
       setOrderDone(true)
     } else {
@@ -735,6 +743,63 @@ export default function StorePage() {
                       </div>
                     )}
                   </div>
+                  {/* Pago en efectivo: con cuánto paga (obligatorio) */}
+                  <div>
+                    <p className="text-xs mb-2 font-medium" style={{ color: 'var(--muted)' }}>
+                      ¿CON CUÁNTO VAS A PAGAR? <span style={{ color: 'var(--danger)' }}>*</span> <span className="font-normal">(solo efectivo)</span>
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" onClick={() => { setPayChoice('exact'); setCustomPay('') }}
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-all"
+                        style={{
+                          background: payChoice === 'exact' ? 'var(--accent2)' : 'var(--surface2)',
+                          color: payChoice === 'exact' ? 'var(--bg)' : 'var(--accent)',
+                          border: `1px solid ${payChoice === 'exact' ? 'var(--accent2)' : 'var(--border)'}`,
+                        }}>
+                        Exacto
+                      </button>
+                      {suggestedBills(cartTotal).map(b => (
+                        <button key={b} type="button" onClick={() => { setPayChoice(b); setCustomPay('') }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-all"
+                          style={{
+                            background: payChoice === b ? 'var(--accent2)' : 'var(--surface2)',
+                            color: payChoice === b ? 'var(--bg)' : 'var(--accent)',
+                            border: `1px solid ${payChoice === b ? 'var(--accent2)' : 'var(--border)'}`,
+                          }}>
+                          {b}€
+                        </button>
+                      ))}
+                      <input
+                        type="number" inputMode="decimal" min={0} value={customPay}
+                        onChange={e => {
+                          setCustomPay(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setPayChoice(!isNaN(v) && v > 0 ? v : null)
+                        }}
+                        placeholder="Otra"
+                        className="w-20 px-3 py-1.5 rounded-lg text-sm outline-none"
+                        style={{
+                          background: 'var(--surface2)',
+                          border: `1px solid ${customPay && payChoice !== 'exact' ? 'var(--accent2)' : 'var(--border)'}`,
+                          color: 'var(--accent2)',
+                        }} />
+                    </div>
+                    {/* Feedback de cambio / validación */}
+                    {payChoice !== null && payChoice !== 'exact' && payChoice < cartTotal && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--danger)' }}>
+                        Debe ser igual o mayor que el total ({cartTotal.toFixed(2)}€)
+                      </p>
+                    )}
+                    {payChoice !== null && payChoice !== 'exact' && payChoice >= cartTotal && (
+                      <p className="text-xs mt-2 font-medium" style={{ color: 'var(--success)' }}>
+                        Cambio a preparar: {changeFor(cartTotal, payChoice).toFixed(2)}€
+                      </p>
+                    )}
+                    {payChoice === 'exact' && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>Pago exacto, sin cambio.</p>
+                    )}
+                  </div>
+
                   <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Nota para el pedido (opcional)" rows={2}
                     className="w-full px-3 py-2 rounded-xl text-sm outline-none resize-none"
                     style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} />
@@ -744,11 +809,19 @@ export default function StorePage() {
                     <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
                     <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{cartTotal.toFixed(2)} €</span>
                   </div>
-                  <button onClick={placeOrder} disabled={placing || !pickupDate || !pickupTime}
+                  {(() => {
+                    const payValid = payChoice !== null && (payChoice === 'exact' || payChoice >= cartTotal)
+                    return (
+                  <button onClick={placeOrder} disabled={placing || !pickupDate || !pickupTime || !payValid}
                           className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 cursor-pointer"
                           style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                    {placing ? 'Enviando pedido...' : !pickupDate || !pickupTime ? 'Elige día y hora de recogida' : 'Realizar pedido'}
+                    {placing ? 'Enviando pedido...'
+                      : !pickupDate || !pickupTime ? 'Elige día y hora de recogida'
+                      : !payValid ? 'Indica con cuánto pagas'
+                      : 'Realizar pedido'}
                   </button>
+                    )
+                  })()}
                   <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>Pago en efectivo al recoger</p>
                 </div>
               </>

@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Plus, Minus, X, Phone, MessageCircle, RefreshCw, Clock, CheckCircle2, Package, Undo2, Pencil, Trash2 } from 'lucide-react'
 import { getPickupDays, getTimeSlots, formatDayLabel, dateToValue } from '@/lib/pickup'
+import { changeFor, suggestedBills } from '@/lib/cash'
 
 interface OItem { id: number; productName: string; flavorName: string | null; price: number; quantity: number }
 interface Order {
-  id: number; total: number; status: string; note: string | null; manual: boolean
+  id: number; total: number; status: string; note: string | null; payWith: number | null; manual: boolean
   pickupDate: string | null; pickupTime: string | null; customerName: string | null; customerPhone: string | null
   items: OItem[]; accessCode: { code: string; clientName: string | null; phone: string | null } | null
 }
@@ -259,6 +260,30 @@ export default function AgendaTab() {
                 {o.note && <p className="text-xs mt-2 pt-2" style={{ color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>📝 {o.note}</p>}
               </div>
 
+              {/* Pago en efectivo / cambio a preparar */}
+              {(() => {
+                const change = changeFor(o.total, o.payWith)
+                const insufficient = o.payWith != null && o.payWith < o.total
+                if (insufficient) return (
+                  <div className="mb-2 px-3 py-2 rounded-lg text-sm font-semibold"
+                       style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--danger)' }}>
+                    ⚠️ Paga con {o.payWith}€ pero el total es {o.total.toFixed(2)}€
+                  </div>
+                )
+                if (change > 0) return (
+                  <div className="mb-2 px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between"
+                       style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--success)' }}>
+                    <span>💵 Paga con {o.payWith}€</span>
+                    <span>Cambio: {change.toFixed(2)}€</span>
+                  </div>
+                )
+                return (
+                  <div className="mb-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                    💵 Pago exacto (sin cambio)
+                  </div>
+                )
+              })()}
+
               <div className="flex justify-between items-center">
                 <span className="font-semibold" style={{ color: 'var(--accent2)' }}>Total</span>
                 <span className="font-bold text-lg" style={{ color: 'var(--accent2)' }}>{o.total.toFixed(2)} €</span>
@@ -378,6 +403,8 @@ function NewOrderModal({ products, closures, onClose, onCreated }: { products: P
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [note, setNote] = useState('')
+  const [payChoice, setPayChoice] = useState<number | 'exact'>('exact')
+  const [customPay, setCustomPay] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([])
   const [pickupDate, setPickupDate] = useState('')
   const [pickupTime, setPickupTime] = useState('')
@@ -426,6 +453,7 @@ function NewOrderModal({ products, closures, onClose, onCreated }: { products: P
       body: JSON.stringify({
         items: lines.map(l => ({ productId: l.productId, flavorId: l.flavorId, quantity: l.quantity })),
         customerName: name, customerPhone: phone, pickupDate, pickupTime, note,
+        payWith: payChoice === 'exact' ? null : payChoice,
       }),
     })
     if (res.ok) onCreated()
@@ -518,6 +546,36 @@ function NewOrderModal({ products, closures, onClose, onCreated }: { products: P
                 )
               })}
             </div>
+          )}
+        </div>
+
+        {/* Pago en efectivo (opcional) */}
+        <div>
+          <p className="text-xs mb-2 font-medium" style={{ color: 'var(--muted)' }}>PAGA CON (efectivo)</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => { setPayChoice('exact'); setCustomPay('') }}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer"
+              style={{ background: payChoice === 'exact' ? 'var(--accent2)' : 'var(--surface2)', color: payChoice === 'exact' ? 'var(--bg)' : 'var(--accent)', border: `1px solid ${payChoice === 'exact' ? 'var(--accent2)' : 'var(--border)'}` }}>
+              Exacto
+            </button>
+            {suggestedBills(total).map(b => (
+              <button key={b} type="button" onClick={() => { setPayChoice(b); setCustomPay('') }}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer"
+                style={{ background: payChoice === b ? 'var(--accent2)' : 'var(--surface2)', color: payChoice === b ? 'var(--bg)' : 'var(--accent)', border: `1px solid ${payChoice === b ? 'var(--accent2)' : 'var(--border)'}` }}>
+                {b}€
+              </button>
+            ))}
+            <input type="number" inputMode="decimal" min={0} value={customPay}
+              onChange={e => { setCustomPay(e.target.value); const v = parseFloat(e.target.value); setPayChoice(!isNaN(v) && v > 0 ? v : 'exact') }}
+              placeholder="Otra"
+              className="w-20 px-3 py-1.5 rounded-lg text-sm outline-none"
+              style={{ background: 'var(--surface2)', border: `1px solid ${customPay ? 'var(--accent2)' : 'var(--border)'}`, color: 'var(--accent2)' }} />
+          </div>
+          {payChoice !== 'exact' && payChoice >= total && changeFor(total, payChoice) > 0 && (
+            <p className="text-xs mt-2 font-medium" style={{ color: 'var(--success)' }}>Cambio: {changeFor(total, payChoice).toFixed(2)}€</p>
+          )}
+          {payChoice !== 'exact' && payChoice < total && (
+            <p className="text-xs mt-2" style={{ color: 'var(--danger)' }}>Menor que el total ({total.toFixed(2)}€)</p>
           )}
         </div>
 

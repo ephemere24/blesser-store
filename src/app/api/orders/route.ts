@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/auth'
 import { isValidPickup, formatDayLabel } from '@/lib/pickup'
 import { effectivePrice, isSaleActive } from '@/lib/price'
 import { consumeSaleUnits } from '@/lib/orders'
+import { changeFor } from '@/lib/cash'
 
 async function notifyTelegram(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
   const user = token ? verifyToken(token) : null
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { note, pickupDate, pickupTime } = await req.json().catch(() => ({ note: null, pickupDate: null, pickupTime: null }))
+  const { note, payWith, pickupDate, pickupTime } = await req.json().catch(() => ({ note: null, payWith: null, pickupDate: null, pickupTime: null }))
 
   // Validar día y hora de recogida
   if (!pickupDate || !pickupTime) {
@@ -91,6 +92,12 @@ export async function POST(req: NextRequest) {
   const accessCode = await prisma.accessCode.findUnique({ where: { id: user.codeId } })
   const total = cart.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0)
 
+  // Validar pago en efectivo (con cuánto paga)
+  const pay: number | null = typeof payWith === 'number' && !isNaN(payWith) ? payWith : null
+  if (pay != null && pay < total) {
+    return NextResponse.json({ error: 'La cantidad con la que pagas debe ser igual o mayor que el total' }, { status: 400 })
+  }
+
   // Crear pedido, descontar stock y vaciar carrito de forma atómica
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
@@ -98,6 +105,7 @@ export async function POST(req: NextRequest) {
         accessCodeId: user.codeId,
         total,
         note: note || null,
+        payWith: pay,
         pickupDate,
         pickupTime,
         items: {
@@ -141,12 +149,19 @@ export async function POST(req: NextRequest) {
     i => `• ${i.quantity}x ${i.productName}${i.flavorName ? ` — ${i.flavorName}` : ''} · ${(i.price * i.quantity).toFixed(2)} €`
   )
   const pickupLabel = `${formatDayLabel(new Date(pickupDate + 'T00:00:00'))} a las ${pickupTime}`
+  const change = changeFor(total, pay)
+  const payLine = pay == null
+    ? '💵 <b>Pago exacto</b> (sin cambio)'
+    : change <= 0
+      ? `💵 Paga con <b>${pay}€</b> (exacto)`
+      : `💵 Paga con <b>${pay}€</b> → <b>cambio ${change.toFixed(2)}€</b>`
   const message =
     `🛒 <b>Nuevo pedido #${order.id}</b>\n\n` +
     `👤 Cliente: <b>${clientLabel}</b>\n` +
     `📅 Recogida: <b>${pickupLabel}</b>\n\n` +
     `${lines.join('\n')}\n\n` +
-    `💰 <b>Total: ${total.toFixed(2)} €</b>` +
+    `💰 <b>Total: ${total.toFixed(2)} €</b>\n` +
+    `${payLine}` +
     (note ? `\n\n📝 Nota: ${note}` : '')
 
   await notifyTelegram(message)
