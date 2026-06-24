@@ -57,6 +57,23 @@ async function adjustStock(flavorId: number, deltaOrdered: number) {
   })
 }
 
+// Ajusta las unidades de oferta de un producto. delta positivo = se pide más (consume), negativo = se devuelve.
+async function adjustSaleUnits(productId: number, onSale: boolean, delta: number) {
+  if (!onSale) return
+  const product = await prisma.product.findUnique({ where: { id: productId } })
+  if (!product || product.saleUnits == null) return
+  if (delta > 0 && product.saleUnits < delta) {
+    throw new OrderEditError(
+      `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}.`,
+      409
+    )
+  }
+  await prisma.product.update({
+    where: { id: productId },
+    data: { saleUnits: Math.max(0, product.saleUnits - delta) },
+  })
+}
+
 /**
  * Aplica una operación de edición a un pedido. Reajusta el stock y el total.
  * Lanza OrderEditError si algo no es válido.
@@ -81,6 +98,7 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
       const newQty = Math.max(0, Math.floor(edit.quantity))
       const delta = newQty - item.quantity
       if (item.flavorId) await adjustStock(item.flavorId, delta)
+      if (item.productId) await adjustSaleUnits(item.productId, item.onSale, delta)
       if (newQty <= 0) {
         await prisma.orderItem.delete({ where: { id: item.id } })
       } else {
@@ -91,7 +109,8 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
     case 'removeItem': {
       const item = order.items.find(i => i.id === edit.itemId)
       if (!item) throw new OrderEditError('Línea no encontrada', 404)
-      if (item.flavorId) await adjustStock(item.flavorId, -item.quantity) // devolver stock
+      if (item.flavorId) await adjustStock(item.flavorId, -item.quantity)
+      if (item.productId) await adjustSaleUnits(item.productId, item.onSale, -item.quantity)
       await prisma.orderItem.delete({ where: { id: item.id } })
       break
     }
@@ -99,12 +118,6 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
       const qty = Math.max(1, Math.floor(edit.quantity))
       const product = await prisma.product.findUnique({ where: { id: edit.productId } })
       if (!product) throw new OrderEditError('Producto no encontrado', 404)
-      if (isSaleActive(product) && product.saleUnits != null && qty > product.saleUnits) {
-        throw new OrderEditError(
-          `Solo quedan ${product.saleUnits} unidad${product.saleUnits === 1 ? '' : 'es'} en oferta de ${product.name}.`,
-          409
-        )
-      }
       let flavorName: string | null = null
       if (edit.flavorId) {
         const flavor = await prisma.flavor.findUnique({ where: { id: edit.flavorId } })
@@ -112,11 +125,14 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
         flavorName = flavor.name
         await adjustStock(edit.flavorId, qty)
       }
+      const onSale = isSaleActive(product)
       // Si ya existe una línea con mismo producto+sabor, sumamos
       const existing = order.items.find(i => i.productId === edit.productId && i.flavorId === (edit.flavorId ?? null))
       if (existing) {
+        await adjustSaleUnits(product.id, existing.onSale, qty)
         await prisma.orderItem.update({ where: { id: existing.id }, data: { quantity: existing.quantity + qty } })
       } else {
+        await adjustSaleUnits(product.id, onSale, qty)
         await prisma.orderItem.create({
           data: {
             orderId,
@@ -125,19 +141,19 @@ export async function applyOrderEdit(orderId: number, edit: EditOp) {
             productName: product.name,
             flavorName,
             price: effectivePrice(product),
-            onSale: isSaleActive(product),
+            onSale,
             quantity: qty,
           },
         })
-        if (isSaleActive(product)) await consumeSaleUnits([{ productId: product.id, onSale: true, quantity: qty }])
       }
       break
     }
     case 'cancel': {
       if (order.status === 'cancelled') break
-      // Devolver stock de todas las líneas
+      // Devolver stock y unidades de oferta de todas las líneas
       for (const i of order.items) {
         if (i.flavorId) await adjustStock(i.flavorId, -i.quantity)
+        if (i.productId) await adjustSaleUnits(i.productId, i.onSale, -i.quantity)
       }
       await prisma.order.update({ where: { id: orderId }, data: { status: 'cancelled' } })
       break
@@ -231,10 +247,12 @@ export async function applyOrderSave(
   if (order.status === 'completed') throw new OrderEditError('El pedido ya está completado', 409)
   if (order.status === 'cancelled') throw new OrderEditError('El pedido está cancelado', 409)
 
-  // Cantidades actuales por sabor
+  // Cantidades actuales por sabor y por producto en oferta
   const curByFlavor = new Map<number, number>()
+  const curSaleByProduct = new Map<number, number>()
   for (const it of order.items) {
     if (it.flavorId) curByFlavor.set(it.flavorId, (curByFlavor.get(it.flavorId) || 0) + it.quantity)
+    if (it.onSale && it.productId) curSaleByProduct.set(it.productId, (curSaleByProduct.get(it.productId) || 0) + it.quantity)
   }
 
   // Fusionar líneas deseadas por producto+sabor
@@ -268,8 +286,9 @@ export async function applyOrderSave(
     stockUpdates.push({ id: fid, stock: newStock, inStock: newStock > 0 })
   }
 
-  // Resolver nombres/precio de las líneas
+  // Resolver nombres/precio de las líneas y calcular delta de saleUnits por producto
   const lineData: { orderId: number; productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }[] = []
+  const desSaleByProduct = new Map<number, number>()
   for (const d of mergedDesired) {
     const product = await prisma.product.findUnique({ where: { id: d.productId } })
     if (!product) throw new OrderEditError('Producto no encontrado', 404)
@@ -279,12 +298,21 @@ export async function applyOrderSave(
       if (!f) throw new OrderEditError('Sabor no encontrado', 404)
       flavorName = f.name
     }
+    const onSale = isSaleActive(product)
+    if (onSale) desSaleByProduct.set(d.productId, (desSaleByProduct.get(d.productId) || 0) + d.quantity)
     lineData.push({
       orderId, productId: d.productId, flavorId: d.flavorId,
-      productName: product.name, flavorName, price: effectivePrice(product), onSale: isSaleActive(product), quantity: d.quantity,
+      productName: product.name, flavorName, price: effectivePrice(product), onSale, quantity: d.quantity,
     })
   }
   const total = lineData.reduce((s, l) => s + l.price * l.quantity, 0)
+
+  // Validar y aplicar deltas de saleUnits
+  const allSaleProductIds = new Set<number>([...curSaleByProduct.keys(), ...desSaleByProduct.keys()])
+  for (const pid of allSaleProductIds) {
+    const delta = (desSaleByProduct.get(pid) || 0) - (curSaleByProduct.get(pid) || 0)
+    if (delta !== 0) await adjustSaleUnits(pid, true, delta)
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.orderItem.deleteMany({ where: { orderId } })
