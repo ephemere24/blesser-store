@@ -19,6 +19,8 @@ interface Product {
 function ImageGallery({ images, name, category }: { images: string[]; name: string; category: string }) {
   const [current, setCurrent] = useState(0)
   const imgRef = useRef<HTMLImageElement>(null)
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
 
   function changeTo(idx: number) {
     if (!imgRef.current) { setCurrent(idx); return }
@@ -29,6 +31,26 @@ function ImageGallery({ images, name, category }: { images: string[]; name: stri
         gsap.to(imgRef.current, { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.out' })
       },
     })
+  }
+
+  const goNext = () => changeTo((current + 1) % images.length)
+  const goPrev = () => changeTo((current - 1 + images.length) % images.length)
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null || touchStartY.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    touchStartX.current = null
+    touchStartY.current = null
+    // Solo si el gesto es claramente horizontal y supera el umbral
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) goNext()
+      else goPrev()
+    }
   }
 
   if (images.length === 0) {
@@ -46,17 +68,18 @@ function ImageGallery({ images, name, category }: { images: string[]; name: stri
   return (
     <div className="mb-6">
       <div className="rounded-2xl aspect-square relative overflow-hidden"
-           style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-        <img ref={imgRef} src={images[current]} alt={name} className="w-full h-full object-cover" />
+           style={{ background: 'var(--surface2)', border: '1px solid var(--border)', touchAction: 'pan-y' }}
+           onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <img ref={imgRef} src={images[current]} alt={name} className="w-full h-full object-cover select-none" draggable={false} />
         {images.length > 1 && (
           <>
-            <button onClick={() => changeTo((current - 1 + images.length) % images.length)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+            <button onClick={goPrev}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full items-center justify-center cursor-pointer hidden sm:flex"
               style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}>
               <ChevronLeft size={18} />
             </button>
-            <button onClick={() => changeTo((current + 1) % images.length)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+            <button onClick={goNext}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full items-center justify-center cursor-pointer hidden sm:flex"
               style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}>
               <ChevronRight size={18} />
             </button>
