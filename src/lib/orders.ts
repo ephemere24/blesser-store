@@ -204,7 +204,7 @@ export async function notifyOrderChange(order: OrderForNotify, clientLabel: stri
 export type DesiredItem = { productId: number; flavorId: number | null; quantity: number; price?: number; onSale?: boolean }
 export type DraftLine = { productId: number; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }
 
-type OrderWithItems = { items: { productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; quantity: number }[] }
+type OrderWithItems = { items: { productId: number | null; flavorId: number | null; productName: string; flavorName: string | null; price: number; onSale: boolean; quantity: number }[] }
 
 // Borrador inicial = copia de las líneas reales del pedido (precios y onSale fijos)
 export function draftFromOrder(order: OrderWithItems): DraftLine[] {
