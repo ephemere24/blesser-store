@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, Minus } from 'lucide-react'
 import { gsap } from 'gsap'
 import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
@@ -89,6 +89,7 @@ export default function ProductPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedFlavor, setSelectedFlavor] = useState<number | null>(null)
+  const [qty, setQty] = useState(1)
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null)
@@ -146,15 +147,15 @@ export default function ProductPage() {
     const res = activeOrderId
       ? await fetch(`/api/orders/${activeOrderId}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ op: 'addItem', productId: product.id, flavorId: selectedFlavor, quantity: 1 }),
+          body: JSON.stringify({ op: 'addItem', productId: product.id, flavorId: selectedFlavor, quantity: qty }),
         })
       : await fetch('/api/cart', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId: product.id, flavorId: selectedFlavor }),
+          body: JSON.stringify({ productId: product.id, flavorId: selectedFlavor, quantity: qty }),
         })
     if (res.ok) {
       setAdded(true)
-      setCartCount(c => c + 1)
+      setCartCount(c => c + qty)
       if (btnRef.current) gsap.fromTo(btnRef.current, { scale: 1.05 }, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' })
       setTimeout(() => setAdded(false), 900)
     } else {
@@ -251,7 +252,7 @@ export default function ProductPage() {
               <div className="flex flex-wrap gap-2">
                 {inStockFlavors.map(f => (
                   <button key={f.id}
-                    onClick={() => setSelectedFlavor(f.id === selectedFlavor ? null : f.id)}
+                    onClick={() => { setSelectedFlavor(f.id === selectedFlavor ? null : f.id); setQty(1) }}
                     className="px-3 py-1.5 rounded-xl text-sm font-medium transition-all cursor-pointer flex items-center gap-1.5"
                     style={{
                       background: selectedFlavor === f.id ? 'var(--accent2)' : 'var(--surface2)',
@@ -271,14 +272,43 @@ export default function ProductPage() {
             </div>
           )}
 
-          <button ref={btnRef}
-            onClick={addToCart}
-            disabled={adding || inStockFlavors.length === 0}
-            className="w-full py-4 rounded-2xl font-semibold text-base transition-colors disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer mt-4"
-            style={{ background: added ? '#22c55e' : 'var(--accent2)', color: 'var(--bg)' }}>
-            <ShoppingCart size={18} />
-            {added ? '✓ Añadido' : adding ? 'Añadiendo...' : inStockFlavors.length === 0 ? 'Sin stock' : activeOrderId ? 'Añadir a mi pedido' : 'Añadir al carrito'}
-          </button>
+          {inStockFlavors.length > 0 && (
+            <div className="flex items-center gap-3 mt-4">
+              <div className="flex items-center rounded-xl overflow-hidden shrink-0"
+                   style={{ border: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                <button onClick={() => setQty(q => Math.max(1, q - 1))} disabled={qty <= 1}
+                        className="w-11 h-11 flex items-center justify-center cursor-pointer disabled:opacity-30 transition-colors"
+                        style={{ color: 'var(--accent2)' }}>
+                  <Minus size={16} />
+                </button>
+                <input
+                  type="number" min={1} max={99} value={qty}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setQty(Math.min(99, v)) }}
+                  className="w-10 text-center text-sm font-bold outline-none bg-transparent"
+                  style={{ color: 'var(--accent2)' }}
+                />
+                <button onClick={() => setQty(q => Math.min(99, q + 1))}
+                        className="w-11 h-11 flex items-center justify-center cursor-pointer transition-colors"
+                        style={{ color: 'var(--accent2)' }}>
+                  <Plus size={16} />
+                </button>
+              </div>
+              <button ref={btnRef}
+                onClick={addToCart}
+                disabled={adding}
+                className="flex-1 py-3 rounded-2xl font-semibold text-sm transition-colors disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer"
+                style={{ background: added ? '#22c55e' : 'var(--accent2)', color: 'var(--bg)' }}>
+                <ShoppingCart size={16} />
+                {added ? '✓ Añadido' : adding ? 'Añadiendo...' : activeOrderId ? 'Añadir a pedido' : 'Añadir al carrito'}
+              </button>
+            </div>
+          )}
+          {inStockFlavors.length === 0 && (
+            <div className="mt-4 w-full py-4 rounded-2xl text-center text-sm font-semibold opacity-40"
+                 style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+              Sin stock
+            </div>
+          )}
         </div>
       </div>
     </div>
