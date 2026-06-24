@@ -11,7 +11,7 @@ en caso de que el VPS se caiga o se quiera migrar a otro servidor.
 |---|---|---|
 | **Código de la web** | Cada `git push` | Repo `ephemere24/blesser-store` (GitHub) |
 | **Base de datos** (catálogo, clientes, códigos, pedidos, ajustes) | `pg_dump` cifrado, diario | Repo privado `blesser-backups` (GitHub) |
-| **Fotos de productos** | `tar` del volumen, cifrado, diario | Repo privado `blesser-backups` (GitHub) |
+| **Fotos de productos** | `tar` del volumen, cifrado, **solo cuando cambian** | Repo privado `blesser-backups` (GitHub) |
 
 - **Frecuencia:** diaria (cron a las 04:00 del VPS).
 - **Retención:** 30 días (las copias más antiguas se borran solas).
