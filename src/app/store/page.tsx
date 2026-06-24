@@ -9,6 +9,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
 import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
+import SiteBackground from '@/components/SiteBackground'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -265,7 +266,9 @@ export default function StorePage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+    <>
+    <SiteBackground />
+    <div className="min-h-screen relative" style={{ background: 'transparent', zIndex: 1 }}>
       <header ref={headerRef} className="sticky top-0 z-40 px-4 py-3 flex items-center justify-between"
               style={{ background: 'rgba(10,10,10,0.9)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
@@ -732,5 +735,6 @@ export default function StorePage() {
         </div>
       )}
     </div>
+    </>
   )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { gsap } from 'gsap'
 import { Check } from 'lucide-react'
+import SiteBackground from '@/components/SiteBackground'
 
 export default function LoginPage() {
   const [code, setCode] = useState('')
@@ -110,8 +111,10 @@ export default function LoginPage() {
   }
 
   return (
+    <>
+    <SiteBackground />
     <div ref={containerRef} className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
-         style={{ background: 'var(--bg)' }}>
+         style={{ background: 'transparent', zIndex: 1 }}>
       {/* Fondo animado */}
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,255,255,0.03) 0%, transparent 70%)',
@@ -269,5 +272,6 @@ export default function LoginPage() {
         </div>
       )}
     </div>
+    </>
   )
 }
