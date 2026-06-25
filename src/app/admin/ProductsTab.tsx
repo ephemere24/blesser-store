@@ -112,7 +112,7 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
         ) : (
           <div className="space-y-2">
             <p className="text-xs mb-1" style={{ color: 'var(--muted)' }}>{results.length} resultado(s)</p>
-            {results.map(p => <Row key={p.id} p={p} onEdit={onEdit} onToggleVisible={onToggleVisible} onDelete={onDelete} />)}
+            {results.map(p => <Row key={p.id} p={p} showCategory onEdit={onEdit} onToggleVisible={onToggleVisible} onDelete={onDelete} />)}
           </div>
         )
       ) : (
@@ -166,7 +166,7 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
               </button>
               {!collapsed.has(SOLDOUT_KEY) && (
                 <div className="px-3 pb-3 space-y-2">
-                  {soldout.map(p => <Row key={p.id} p={p} soldout onEdit={onEdit} onToggleVisible={onToggleVisible} onDelete={onDelete} />)}
+                  {soldout.map(p => <Row key={p.id} p={p} soldout showCategory onEdit={onEdit} onToggleVisible={onToggleVisible} onDelete={onDelete} />)}
                 </div>
               )}
             </div>
@@ -177,36 +177,36 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
   )
 }
 
-function Row({ p, draggable, soldout, onEdit, onToggleVisible, onDelete }: {
-  p: Product; draggable?: boolean; soldout?: boolean
+function Row({ p, draggable, soldout, showCategory, onEdit, onToggleVisible, onDelete }: {
+  p: Product; draggable?: boolean; soldout?: boolean; showCategory?: boolean
   onEdit: (p: Product) => void; onToggleVisible: (p: Product) => void; onDelete: (id: number) => void
 }) {
   const img = firstImage(p)
   const inStock = p.flavors.filter(f => f.inStock).length
   const total = p.flavors.length
   return (
-    <div className="rounded-xl p-2.5 flex items-center gap-3"
+    <div className="rounded-xl p-2.5 flex items-center gap-2"
          style={{ background: 'var(--surface2)', border: '1px solid var(--border)', opacity: p.visible ? 1 : 0.5 }}>
-      {draggable && <GripVertical size={16} className="shrink-0 cursor-grab active:cursor-grabbing" style={{ color: 'var(--muted)' }} />}
-      <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <ImageIcon size={16} style={{ color: 'var(--muted)' }} />}
+      {draggable && <GripVertical size={15} className="shrink-0 cursor-grab active:cursor-grabbing -mx-0.5" style={{ color: 'var(--muted)' }} />}
+      <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <ImageIcon size={15} style={{ color: 'var(--muted)' }} />}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-semibold truncate" style={{ color: 'var(--accent2)' }}>{p.name}</p>
-          {p.onSale && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--danger)', color: '#fff' }}>OFERTA</span>}
-          {!p.visible && <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>Oculto</span>}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="font-semibold text-sm truncate" style={{ color: 'var(--accent2)' }}>{p.name}</p>
+          {p.onSale && <span className="text-[9px] font-bold px-1 py-0.5 rounded shrink-0" style={{ background: 'var(--danger)', color: '#fff' }}>OFERTA</span>}
+          {!p.visible && <span className="text-[9px] px-1 py-0.5 rounded shrink-0" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>Oculto</span>}
         </div>
         <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>
-          {p.price} €{p.category ? ` · ${p.category}` : ''} · {soldout ? <span style={{ color: 'var(--danger)' }}>Agotado</span> : total > 0 ? `${inStock}/${total} sabores` : 'sin sabores'}
+          {p.price} €{showCategory && p.category ? ` · ${p.category}` : ''} · {soldout ? <span style={{ color: 'var(--danger)' }}>Agotado</span> : total > 0 ? `${inStock}/${total} sabores` : 'sin sabores'}
         </p>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <button onClick={() => onToggleVisible(p)} className="p-2 rounded-lg cursor-pointer" style={{ background: 'var(--surface)', color: p.visible ? 'var(--success)' : 'var(--muted)' }} title={p.visible ? 'Ocultar' : 'Mostrar'}>
-          {p.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={() => onToggleVisible(p)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'var(--surface)', color: p.visible ? 'var(--success)' : 'var(--muted)' }} title={p.visible ? 'Ocultar' : 'Mostrar'}>
+          {p.visible ? <Eye size={15} /> : <EyeOff size={15} />}
         </button>
-        <button onClick={() => onEdit(p)} className="p-2 rounded-lg cursor-pointer" style={{ background: 'var(--surface)', color: 'var(--accent)' }}><Pencil size={14} /></button>
-        <button onClick={() => onDelete(p.id)} className="p-2 rounded-lg cursor-pointer" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}><Trash2 size={14} /></button>
+        <button onClick={() => onEdit(p)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'var(--surface)', color: 'var(--accent)' }}><Pencil size={15} /></button>
+        <button onClick={() => onDelete(p.id)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}><Trash2 size={15} /></button>
       </div>
     </div>
   )
