@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock, Calendar, ChevronLeft, ChevronRight, Search, X, Heart } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
@@ -53,6 +53,7 @@ export default function StorePage() {
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
   const [showSuggest, setShowSuggest] = useState(false)
+  const [favIds, setFavIds] = useState<Set<number>>(new Set())
   const [cartStep, setCartStep] = useState<'items' | 'pickup'>('items')
   const [closures, setClosures] = useState<{ date: string; time: string | null }[]>([])
   const [, setSaleTick] = useState(0)
@@ -95,8 +96,10 @@ export default function StorePage() {
       fetch('/api/cart').then(r => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/orders').then(r => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/closures').then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([prods, cartData, orders, cls]) => {
+      fetch('/api/favorites').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([prods, cartData, orders, cls, favs]) => {
       setProducts(Array.isArray(prods) ? prods : [])
+      setFavIds(new Set((Array.isArray(favs) ? favs : []).map((p: { id: number }) => p.id)))
       setCart(cartData)
       const list = Array.isArray(orders) ? orders : []
       setActiveOrder(list.find((o: Order) => o.status === 'pending') || null)
@@ -243,6 +246,17 @@ export default function StorePage() {
     guardedNav(async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/') })
   }
 
+  async function toggleFav(productId: number, e: React.MouseEvent) {
+    e.preventDefault(); e.stopPropagation()
+    const fav = favIds.has(productId)
+    setFavIds(prev => { const n = new Set(prev); if (fav) n.delete(productId); else n.add(productId); return n })
+    const res = await fetch('/api/favorites', {
+      method: fav ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId }),
+    })
+    if (!res.ok) setFavIds(prev => { const n = new Set(prev); if (fav) n.add(productId); else n.delete(productId); return n })
+  }
+
   // Cantidad actual de un producto+sabor en el carrito o pedido
   function cardQty(productId: number, flavorId: number | null): number {
     if (activeOrder) return orderItems.filter(i => i.productId === productId && i.flavorId === flavorId).reduce((s, i) => s + i.quantity, 0)
@@ -294,6 +308,18 @@ export default function StorePage() {
           <span className="font-semibold text-sm tracking-wide" style={{ color: 'var(--accent2)' }}>Blesser Store</span>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => guardedNav(() => router.push('/store/favoritos'))}
+                className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+            <Heart size={16} />
+            <span className="hidden sm:inline">Favoritos</span>
+            {favIds.size > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center"
+                    style={{ background: '#ef4444', color: '#fff' }}>
+                {favIds.size}
+              </span>
+            )}
+          </button>
           <button onClick={() => guardedNav(() => router.push('/store/pedidos'))}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
                 style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
@@ -439,6 +465,11 @@ export default function StorePage() {
                         {pct != null && <span className="line-through opacity-50 font-medium">{product.price}€</span>}
                         <span style={{ color: pct != null ? '#f87171' : 'var(--accent2)' }}>{eff}€</span>
                       </div>
+                      <button onClick={e => toggleFav(product.id, e)} aria-label="Favorito"
+                              className="absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all"
+                              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', color: favIds.has(product.id) ? '#ef4444' : '#fff' }}>
+                        <Heart size={16} fill={favIds.has(product.id) ? '#ef4444' : 'none'} />
+                      </button>
                     </div>
                   </Link>
 

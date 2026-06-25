@@ -16,6 +16,18 @@ model AccessCode {
   createdAt DateTime @default(now())
   carts     Cart[]
   orders    Order[]
+  favorites Favorite[]
+}
+
+model Favorite {
+  id           Int        @id @default(autoincrement())
+  accessCode   AccessCode @relation(fields: [accessCodeId], references: [id], onDelete: Cascade)
+  accessCodeId Int
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    Int
+  createdAt    DateTime   @default(now())
+
+  @@unique([accessCodeId, productId])
 }
 
 model Setting {
@@ -60,6 +72,7 @@ model Product {
   flavors     Flavor[]
   cartItems   CartItem[]
   purchases   Purchase[]
+  favorites   Favorite[]
 }
 
 // Lote de compra de un producto. El coste/unidad se calcula como

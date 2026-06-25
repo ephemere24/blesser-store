@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, Minus } from 'lucide-react'
+import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, Minus, Heart, Share2 } from 'lucide-react'
 import { gsap } from 'gsap'
 import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
@@ -118,6 +118,8 @@ export default function ProductPage() {
   const [added, setAdded] = useState(false)
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null)
   const [cartCount, setCartCount] = useState(0)
+  const [isFav, setIsFav] = useState(false)
+  const [shared, setShared] = useState(false)
   const [, setSaleTick] = useState(0)
 
   const pageRef = useRef<HTMLDivElement>(null)
@@ -135,6 +137,10 @@ export default function ProductPage() {
       if (data) setProduct(data)
       setLoading(false)
     })
+    // ¿Está marcado como favorito?
+    fetch('/api/favorites').then(r => r.ok ? r.json() : []).then((favs: { id: number }[]) => {
+      setIsFav((favs || []).some(p => String(p.id) === String(id)))
+    }).catch(() => {})
     // ¿Hay un pedido abierto? Entonces se añade a ese pedido, no al carrito.
     fetch('/api/orders').then(r => r.ok ? r.json() : []).then((orders) => {
       const pending = (orders || []).find((o: { status: string; id: number; pendingChanges?: boolean; items?: { quantity: number }[]; draftItems?: { quantity: number }[] | null }) => o.status === 'pending')
@@ -163,6 +169,34 @@ export default function ProductPage() {
     }, pageRef)
     return () => ctx.revert()
   }, [loading, product])
+
+  async function toggleFavorite() {
+    if (!product) return
+    const next = !isFav
+    setIsFav(next) // optimista
+    const res = await fetch('/api/favorites', {
+      method: next ? 'POST' : 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: product.id }),
+    })
+    if (!res.ok) setIsFav(!next) // revertir si falla
+  }
+
+  async function shareProduct() {
+    if (!product) return
+    const url = window.location.href
+    const price = effectivePrice(product)
+    const text = `Mira este producto en Blesser Store: ${product.name} — ${price}€`
+    if (navigator.share) {
+      try { await navigator.share({ title: product.name, text, url }) } catch { /* cancelado */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${text}\n${url}`)
+        setShared(true)
+        setTimeout(() => setShared(false), 1500)
+      } catch { alert('No se pudo copiar el enlace') }
+    }
+  }
 
   async function addToCart() {
     if (!product) return
@@ -212,6 +246,16 @@ export default function ProductPage() {
           <ArrowLeft size={16} />
         </Link>
         <span className="flex-1 font-semibold text-sm" style={{ color: 'var(--accent2)' }}>{product.category}</span>
+        <button onClick={toggleFavorite} aria-label="Favorito"
+                className="p-2 rounded-xl transition-all cursor-pointer"
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: isFav ? '#ef4444' : 'var(--muted)' }}>
+          <Heart size={16} fill={isFav ? '#ef4444' : 'none'} />
+        </button>
+        <button onClick={shareProduct} aria-label="Compartir"
+                className="p-2 rounded-xl transition-all cursor-pointer"
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--muted)' }}>
+          <Share2 size={16} />
+        </button>
         <Link href="/store?cart=1"
               className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer"
               style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
@@ -337,6 +381,12 @@ export default function ProductPage() {
           )}
         </div>
       </div>
+      {shared && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-xl text-sm font-medium z-50 bs-rise"
+             style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
+          ✓ Enlace copiado
+        </div>
+      )}
     </div>
     </>
   )
