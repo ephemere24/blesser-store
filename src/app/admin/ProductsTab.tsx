@@ -26,7 +26,7 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
   onReorder: (next: Product[]) => void
 }) {
   const [query, setQuery] = useState('')
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set([SOLDOUT_KEY]))
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()) // por defecto todo plegado
   const [dragId, setDragId] = useState<number | null>(null)
   const [overId, setOverId] = useState<number | null>(null)
 
@@ -50,7 +50,7 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
   }, [available])
 
   function toggle(key: string) {
-    setCollapsed(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+    setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }
 
   async function persist(newAvailable: Product[]) {
@@ -120,7 +120,7 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
           {groups.length === 0 && soldout.length === 0 && <Empty text="Aún no hay productos. Pulsa «Añadir»." />}
 
           {groups.map((g, gi) => {
-            const open = !collapsed.has(g.category)
+            const open = expanded.has(g.category)
             return (
               <div key={g.category} className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <div className="flex items-center gap-2 px-4 py-3">
@@ -159,12 +159,12 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
           {soldout.length > 0 && (
             <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--danger)' }}>
               <button onClick={() => toggle(SOLDOUT_KEY)} className="w-full flex items-center gap-2 px-4 py-3 cursor-pointer">
-                {!collapsed.has(SOLDOUT_KEY) ? <ChevronDown size={16} style={{ color: 'var(--danger)' }} /> : <ChevronRight size={16} style={{ color: 'var(--danger)' }} />}
+                {expanded.has(SOLDOUT_KEY) ? <ChevronDown size={16} style={{ color: 'var(--danger)' }} /> : <ChevronRight size={16} style={{ color: 'var(--danger)' }} />}
                 <PackageX size={15} style={{ color: 'var(--danger)' }} />
                 <span className="font-semibold flex-1 text-left" style={{ color: 'var(--danger)' }}>Sin stock</span>
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--danger)' }}>{soldout.length}</span>
               </button>
-              {!collapsed.has(SOLDOUT_KEY) && (
+              {expanded.has(SOLDOUT_KEY) && (
                 <div className="px-3 pb-3 space-y-2">
                   {soldout.map(p => <Row key={p.id} p={p} soldout showCategory onEdit={onEdit} onToggleVisible={onToggleVisible} onDelete={onDelete} />)}
                 </div>
