@@ -433,7 +433,7 @@ export default function StorePage() {
             </button>
           </div>
         ) : (
-          <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div ref={gridRef} className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredProducts.map(product => {
               const inStockFlavors = product.flavors.filter(f => f.inStock)
               const selected = selectedFlavors[product.id] ?? null
@@ -473,14 +473,14 @@ export default function StorePage() {
                     </div>
                   </Link>
 
-                  <div className="p-4 flex flex-col gap-3 flex-1">
+                  <div className="p-3 sm:p-4 flex flex-col gap-3 flex-1">
                     <div>
                       <Link href={`/store/${product.id}`}>
-                        <h3 className="font-bold text-base leading-tight hover:opacity-80 transition-opacity"
+                        <h3 className="font-bold text-sm sm:text-base leading-tight hover:opacity-80 transition-opacity"
                             style={{ color: 'var(--accent2)' }}>{product.name}</h3>
                       </Link>
                       {product.specs && (
-                        <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{product.specs}</p>
+                        <p className="text-xs mt-1 hidden sm:block" style={{ color: 'var(--muted)' }}>{product.specs}</p>
                       )}
                       {isSaleActive(product) && product.saleEndsAt && (
                         <div className="mt-2">
@@ -489,6 +489,7 @@ export default function StorePage() {
                       )}
                     </div>
 
+                    <div className="hidden sm:contents">
                     {product.flavors.length > 0 && (
                       <div>
                         <p className="text-xs mb-2 font-medium" style={{ color: 'var(--muted)' }}>SABOR</p>
@@ -540,6 +541,7 @@ export default function StorePage() {
                         </button>
                       )
                     })()}
+                    </div>
                   </div>
                 </div>
               )
