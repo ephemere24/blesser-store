@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef, DragEvent } from 'react'
+import { useState, useEffect, useCallback, useRef, DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Eye, EyeOff, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, BarChart3, Search } from 'lucide-react'
+import { Plus, Trash2, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, BarChart3 } from 'lucide-react'
 import AgendaTab from './AgendaTab'
 import HorarioTab from './HorarioTab'
 import FacturacionTab from './FacturacionTab'
-import { makeFuse, searchProducts } from '@/lib/search'
+import ProductsTab from './ProductsTab'
 
 interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
 interface Product {
@@ -168,9 +168,6 @@ export default function AdminPage() {
   const [rememberAdmin, setRememberAdmin] = useState(true)
   const [tab, setTab] = useState<'agenda' | 'products' | 'codes' | 'horario' | 'facturacion'>('agenda')
   const [products, setProducts] = useState<Product[]>([])
-  const [prodQuery, setProdQuery] = useState('')
-  const prodFuse = useMemo(() => makeFuse(products), [products])
-  const filteredProducts = useMemo(() => searchProducts(prodFuse, products, prodQuery), [prodFuse, products, prodQuery])
   const [codes, setCodes] = useState<AccessCode[]>([])
   const [modal, setModal] = useState<{ open: boolean; product: typeof emptyProduct & { id?: number } }>({
     open: false, product: { ...emptyProduct }
@@ -421,77 +418,14 @@ export default function AdminPage() {
 
         {/* PRODUCTOS */}
         {tab === 'products' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold" style={{ color: 'var(--accent2)' }}>
-                Catálogo ({prodQuery.trim() ? `${filteredProducts.length}/${products.length}` : products.length})
-              </h2>
-              <button
-                onClick={() => setModal({ open: true, product: { ...emptyProduct } })}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer"
-                style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-                <Plus size={14} /> Añadir
-              </button>
-            </div>
-
-            {/* Buscador */}
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl mb-4"
-                 style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-              <Search size={16} style={{ color: 'var(--muted)' }} />
-              <input
-                value={prodQuery}
-                onChange={e => setProdQuery(e.target.value)}
-                placeholder="Buscar por nombre, sabor, categoría, precio…"
-                className="flex-1 bg-transparent outline-none text-sm"
-                style={{ color: 'var(--accent2)' }}
-              />
-              {prodQuery && (
-                <button onClick={() => setProdQuery('')} className="p-1 rounded-lg cursor-pointer" style={{ color: 'var(--muted)' }}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            {filteredProducts.length === 0 ? (
-              <div className="text-center py-12">
-                <Search size={32} className="mx-auto mb-2" style={{ color: 'var(--muted)' }} />
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>No hay productos para «{prodQuery}»</p>
-              </div>
-            ) : (
-            <div className="space-y-3">
-              {filteredProducts.map(p => (
-                <div key={p.id} className="rounded-2xl p-4 flex items-center gap-4"
-                     style={{ background: 'var(--surface)', border: `1px solid ${p.visible ? 'var(--border)' : 'rgba(255,255,255,0.05)'}`, opacity: p.visible ? 1 : 0.5 }}>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate" style={{ color: 'var(--accent2)' }}>{p.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                      {p.price} € · {p.flavors.length} sabores · pos. {p.position}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => toggleVisible(p)}
-                      className="p-2 rounded-xl cursor-pointer transition-all"
-                      style={{ background: 'var(--surface2)', color: p.visible ? 'var(--success)' : 'var(--muted)' }}
-                      title={p.visible ? 'Ocultar' : 'Mostrar'}>
-                      {p.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                    </button>
-                    <button
-                      onClick={() => setModal({ open: true, product: { ...p } })}
-                      className="p-2 rounded-xl cursor-pointer"
-                      style={{ background: 'var(--surface2)', color: 'var(--accent)' }}>
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => deleteProduct(p.id)}
-                      className="p-2 rounded-xl cursor-pointer"
-                      style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            )}
-          </div>
+          <ProductsTab
+            products={products}
+            onAdd={() => setModal({ open: true, product: { ...emptyProduct } })}
+            onEdit={p => setModal({ open: true, product: { ...p } })}
+            onToggleVisible={toggleVisible}
+            onDelete={deleteProduct}
+            onReorder={setProducts}
+          />
         )}
 
         {/* CÓDIGOS */}
