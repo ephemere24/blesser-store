@@ -246,17 +246,6 @@ export default function StorePage() {
     guardedNav(async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/') })
   }
 
-  async function toggleFav(productId: number, e: React.MouseEvent) {
-    e.preventDefault(); e.stopPropagation()
-    const fav = favIds.has(productId)
-    setFavIds(prev => { const n = new Set(prev); if (fav) n.delete(productId); else n.add(productId); return n })
-    const res = await fetch('/api/favorites', {
-      method: fav ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId }),
-    })
-    if (!res.ok) setFavIds(prev => { const n = new Set(prev); if (fav) n.add(productId); else n.delete(productId); return n })
-  }
-
   // Cantidad actual de un producto+sabor en el carrito o pedido
   function cardQty(productId: number, flavorId: number | null): number {
     if (activeOrder) return orderItems.filter(i => i.productId === productId && i.flavorId === flavorId).reduce((s, i) => s + i.quantity, 0)
@@ -460,16 +449,11 @@ export default function StorePage() {
                           LIQUIDACIÓN −{pct}%
                         </div>
                       )}
-                      <div className="absolute top-3 right-3 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                      <div className="absolute bottom-3 right-3 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg"
                            style={{ background: 'var(--bg)', color: 'var(--accent2)' }}>
                         {pct != null && <span className="line-through opacity-50 font-medium">{product.price}€</span>}
                         <span style={{ color: pct != null ? '#f87171' : 'var(--accent2)' }}>{eff}€</span>
                       </div>
-                      <button onClick={e => toggleFav(product.id, e)} aria-label="Favorito"
-                              className="absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all"
-                              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', color: favIds.has(product.id) ? '#ef4444' : '#fff' }}>
-                        <Heart size={16} fill={favIds.has(product.id) ? '#ef4444' : 'none'} />
-                      </button>
                     </div>
                   </Link>
 
