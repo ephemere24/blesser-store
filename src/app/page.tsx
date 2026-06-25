@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { gsap } from 'gsap'
-import { Check } from 'lucide-react'
+import { Check, UserPlus } from 'lucide-react'
 import SiteBackground from '@/components/SiteBackground'
 
 export default function LoginPage() {
@@ -182,13 +182,18 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <button
-          onClick={() => { setShowRequest(true); setReqDone(false); setReqError('') }}
-          className="w-full text-center text-sm mt-4 cursor-pointer transition-opacity hover:opacity-80"
-          style={{ color: 'var(--muted)', textDecoration: 'underline' }}
-        >
-          ¿No tienes código? Solicita acceso
-        </button>
+        <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-center text-sm mb-3" style={{ color: 'var(--accent)' }}>
+            ¿Primera vez aquí? Necesitas un código para entrar
+          </p>
+          <button
+            onClick={() => { setShowRequest(true); setReqDone(false); setReqError('') }}
+            className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2"
+            style={{ background: 'transparent', color: 'var(--accent2)', border: '1.5px solid var(--accent2)' }}
+          >
+            <UserPlus size={16} /> Solicitar acceso
+          </button>
+        </div>
 
         <p ref={footerRef} className="text-center text-xs mt-8" style={{ color: 'var(--muted)' }}>
           Venta exclusiva para mayores de 18 años
