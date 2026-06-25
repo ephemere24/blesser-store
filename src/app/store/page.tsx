@@ -164,7 +164,11 @@ export default function StorePage() {
 
   // --- Añadir producto: al pedido abierto o al carrito ---
   async function addProduct(productId: number) {
-    const flavorId = selectedFlavors[productId] ?? null
+    const product = products.find(p => p.id === productId)
+    const inStock = product ? product.flavors.filter(f => f.inStock) : []
+    // Si solo hay un sabor disponible, se selecciona automáticamente
+    let flavorId = selectedFlavors[productId] ?? null
+    if (flavorId == null && inStock.length === 1) flavorId = inStock[0].id ?? null
     setAddingId(productId)
     if (activeOrder) {
       const ok = await orderPatch({ op: 'addItem', productId, flavorId, quantity: 1 })
@@ -425,7 +429,9 @@ export default function StorePage() {
           <div ref={gridRef} className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredProducts.map(product => {
               const inStockFlavors = product.flavors.filter(f => f.inStock)
-              const selected = selectedFlavors[product.id] ?? null
+              // Si solo hay un sabor disponible, se usa automáticamente (sin tener que marcarlo)
+              const autoFlavor = inStockFlavors.length === 1 ? (inStockFlavors[0].id ?? null) : null
+              const selected = selectedFlavors[product.id] ?? autoFlavor
               const imgs: string[] = JSON.parse(product.images || '[]')
               const eff = effectivePrice(product)
               const pct = discountPct(product)
@@ -474,7 +480,7 @@ export default function StorePage() {
                     </div>
 
                     <div className="hidden sm:contents">
-                    {product.flavors.length > 0 && (
+                    {inStockFlavors.length > 1 && (
                       <div>
                         <p className="text-xs mb-2 font-medium" style={{ color: 'var(--muted)' }}>SABOR</p>
                         <select

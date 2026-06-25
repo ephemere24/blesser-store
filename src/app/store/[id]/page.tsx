@@ -200,16 +200,19 @@ export default function ProductPage() {
 
   async function addToCart() {
     if (!product) return
+    // Si solo hay un sabor disponible, se selecciona automáticamente
+    const inStock = product.flavors.filter(f => f.inStock)
+    const flavorId = selectedFlavor ?? (inStock.length === 1 ? inStock[0].id : null)
     setAdding(true)
     if (btnRef.current) gsap.to(btnRef.current, { scale: 0.96, duration: 0.1, yoyo: true, repeat: 1 })
     const res = activeOrderId
       ? await fetch(`/api/orders/${activeOrderId}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ op: 'addItem', productId: product.id, flavorId: selectedFlavor, quantity: qty }),
+          body: JSON.stringify({ op: 'addItem', productId: product.id, flavorId, quantity: qty }),
         })
       : await fetch('/api/cart', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId: product.id, flavorId: selectedFlavor, quantity: qty }),
+          body: JSON.stringify({ productId: product.id, flavorId, quantity: qty }),
         })
     if (res.ok) {
       setAdded(true)
@@ -314,7 +317,7 @@ export default function ProductPage() {
             <p className="text-sm leading-relaxed" style={{ color: 'var(--accent)' }}>{product.description}</p>
           )}
 
-          {product.flavors.length > 0 && (
+          {(inStockFlavors.length > 1 || outOfStockFlavors.length > 0) && (
             <div>
               <h3 className="text-xs font-semibold mb-3 tracking-widest" style={{ color: 'var(--muted)' }}>
                 SABORES DISPONIBLES
