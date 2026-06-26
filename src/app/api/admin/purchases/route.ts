@@ -38,6 +38,10 @@ export async function POST(req: NextRequest) {
   if (flavorId != null && !product.flavors.some(f => f.id === flavorId)) {
     return NextResponse.json({ error: 'El sabor no pertenece a este producto' }, { status: 400 })
   }
+  // Si se pide sumar al stock pero hay varios sabores y no se eligió ninguno, no sumar en silencio.
+  if (addToStock && flavorId == null && product.flavors.length > 1) {
+    return NextResponse.json({ error: 'Elige el sabor al que sumar el stock' }, { status: 400 })
+  }
 
   const purchase = await prisma.$transaction(async (tx) => {
     const created = await tx.purchase.create({
