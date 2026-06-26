@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
-  Plus, Trash2, Package, Receipt, TrendingUp, TrendingDown, Wallet, Users, PiggyBank,
+  Plus, Trash2, Package, Receipt, TrendingUp, TrendingDown, Wallet, PiggyBank,
   ClipboardList, FileBarChart, Download, Euro, Percent, ShoppingBag, Coins, LineChart, Layers,
   Boxes, Target, ChevronRight, ArrowLeft, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
@@ -24,27 +24,21 @@ interface ProductRef {
 }
 interface BillingData { orders: BillingOrder[]; purchases: BillingPurchase[]; expenses: BillingExpense[]; products: BillingProduct[] }
 
-type Sub = 'resumen' | 'ventas' | 'beneficios' | 'inventario' | 'costes' | 'clientes' | 'caja' | 'pedidos' | 'informes'
+type Sub = 'resumen' | 'pedidos' | 'ventas' | 'costes' | 'inventario' | 'informes'
 const SUBS: { key: Sub; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { key: 'resumen', label: 'Resumen', icon: LineChart },
   { key: 'pedidos', label: 'Pedidos', icon: ClipboardList },
   { key: 'ventas', label: 'Ventas', icon: Receipt },
-  { key: 'clientes', label: 'Clientes', icon: Users },
   { key: 'costes', label: 'Costes', icon: Wallet },
   { key: 'inventario', label: 'Inventario', icon: Boxes },
-  { key: 'beneficios', label: 'Beneficios', icon: PiggyBank },
-  { key: 'caja', label: 'Caja', icon: Coins },
   { key: 'informes', label: 'Informes', icon: FileBarChart },
 ]
 const SUB_DESC: Record<Sub, string> = {
-  resumen: 'Visión general del negocio en el periodo seleccionado.',
-  ventas: 'Qué se ha vendido, por producto y categoría.',
-  beneficios: 'Margen y beneficio real teniendo en cuenta los costes.',
-  inventario: 'Stock, inversión y rentabilidad de cada producto en tiempo real.',
-  costes: 'Registra tus compras (suman al stock) y los gastos generales.',
-  clientes: 'Quién compra y cuánto gasta.',
-  caja: 'Efectivo cobrado y cambios entregados.',
+  resumen: 'Visión general del negocio: KPIs, beneficio, caja y evolución.',
   pedidos: 'Historial completo de pedidos.',
+  ventas: 'Ventas, márgenes y clientes: por producto, categoría y comprador.',
+  costes: 'Registra tus compras (suman al stock) y los gastos generales.',
+  inventario: 'Stock, inversión y rentabilidad de cada producto en tiempo real.',
   informes: 'Exporta tus datos para la contabilidad.',
 }
 const PRESETS: { key: Preset; label: string }[] = [
@@ -127,9 +121,6 @@ export default function FacturacionTab({ products, onProductsChange }: { product
         <>
           {sub === 'resumen' && <Resumen data={data} costMap={costMap} preset={preset} refDate={ref} />}
           {sub === 'ventas' && <Ventas data={data} costMap={costMap} range={range} />}
-          {sub === 'beneficios' && <Beneficios data={data} costMap={costMap} range={range} />}
-          {sub === 'clientes' && <Clientes data={data} range={range} />}
-          {sub === 'caja' && <Caja data={data} range={range} />}
           {sub === 'informes' && <Informes data={data} costMap={costMap} />}
           {sub === 'inventario' && <Inventario products={products} data={data} onMutate={refreshAll} />}
           {sub === 'costes' && <CostesSection products={products} onMutate={refreshAll} />}
@@ -222,6 +213,7 @@ function Resumen({ data, costMap, preset, refDate }: { data: BillingData; costMa
   const prev: Kpis | null = prevR ? computeKpis(data.orders, costMap, data.expenses, prevR.from, prevR.to) : null
   const series = monthlySeries(data.orders, costMap, '2000-01-01', '2999-12-31').slice(-12)
   const proj = preset === 'month' ? monthProjection(data.orders, refDate) : null
+  const cash = cashSummary(data.orders, range.from, range.to)
   const empty = !hasSales(data, range.from, range.to)
 
   if (empty) return (
@@ -263,101 +255,55 @@ function Resumen({ data, costMap, preset, refDate }: { data: BillingData; costMa
       <Section title="Evolución" subtitle="Ingresos y beneficio de los últimos meses">
         <EvolutionChart data={series} />
       </Section>
-    </div>
-  )
-}
 
-// ---------- VENTAS ----------
-function Ventas({ data, costMap, range }: { data: BillingData; costMap: Map<number, number>; range: { from: string; to: string } }) {
-  if (!hasSales(data, range.from, range.to)) return <EmptyState icon={Receipt} title="Sin ventas en este periodo" hint="Aquí verás qué productos y categorías se venden más cuando haya pedidos entregados." />
-  const prods = byProduct(data.orders, costMap, range.from, range.to)
-  const cats = byCategory(data.orders, costMap, data.products, range.from, range.to)
-  const totalRev = prods.reduce((s, p) => s + p.revenue, 0)
-  const totalUnits = prods.reduce((s, p) => s + p.units, 0)
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
-        <KpiCard label="Ingresos del periodo" value={eur(totalRev)} icon={Euro} hero />
-        <KpiCard label="Unidades vendidas" value={String(totalUnits)} icon={Package} />
+      {/* Caja (efectivo del periodo) */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <KpiCard label="Efectivo cobrado" value={eur(cash.collected)} icon={Coins} accent="#22c55e" />
+        <KpiCard label="Cambios entregados" value={eur(cash.changeGiven)} icon={Wallet} accent="#f59e0b" />
+        <KpiCard label="Pagos exactos / con cambio" value={`${cash.exactCount} / ${cash.withChangeCount}`} icon={Receipt} />
       </div>
-      <Section title="Ingresos por producto" subtitle="Ordenado de mayor a menor">
-        <HBars items={prods.map(p => ({ label: p.name, value: p.revenue, sub: `${p.units} ud` }))} />
-      </Section>
-      <Section title="Ingresos por categoría">
-        <HBars items={cats.map(c => ({ label: c.category, value: c.revenue, sub: `${c.units} ud` }))} color="#3b82f6" />
-      </Section>
-      <Section title="Detalle por producto">
-        <Table head={['Producto', 'Uds', 'Ingresos']} align={[0, 1, 1]} rows={prods.map(p => [p.name, String(p.units), eur(p.revenue)])} />
-      </Section>
     </div>
   )
 }
 
-// ---------- BENEFICIOS ----------
-function Beneficios({ data, costMap, range }: { data: BillingData; costMap: Map<number, number>; range: { from: string; to: string } }) {
-  if (!hasSales(data, range.from, range.to)) return <EmptyState icon={PiggyBank} title="Sin datos de beneficio" hint="El beneficio se calcula con los ingresos menos el coste de la mercancía (registra tus compras en Costes)." />
+// ---------- VENTAS (incluye márgenes y clientes) ----------
+function Ventas({ data, costMap, range }: { data: BillingData; costMap: Map<number, number>; range: { from: string; to: string } }) {
+  if (!hasSales(data, range.from, range.to)) return <EmptyState icon={Receipt} title="Sin ventas en este periodo" hint="Aquí verás qué se vende, su margen y quién compra cuando haya pedidos entregados." />
   const k = computeKpis(data.orders, costMap, data.expenses, range.from, range.to)
   const prods = byProduct(data.orders, costMap, range.from, range.to)
-  const byProfit = [...prods].sort((a, b) => b.profit - a.profit)
+  const cats = byCategory(data.orders, costMap, data.products, range.from, range.to)
+  const clients = byClient(data.orders, range.from, range.to)
 
   return (
     <div className="space-y-5">
+      {/* KPIs de ventas + beneficio */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Ingresos" value={eur(k.revenue)} icon={Euro} />
-        <KpiCard label="Coste mercancía" value={eur(k.cogs)} icon={Layers} accent="#f59e0b" />
-        <KpiCard label="Beneficio bruto" value={eur(k.grossProfit)} icon={TrendingUp} accent="#22c55e" hero />
+        <KpiCard label="Ingresos" value={eur(k.revenue)} icon={Euro} hero />
+        <KpiCard label="Beneficio bruto" value={eur(k.grossProfit)} icon={TrendingUp} accent="#22c55e" />
         <KpiCard label="Margen bruto" value={pct(k.grossMarginPct)} icon={Percent} accent="#3b82f6" />
+        <KpiCard label="Unidades vendidas" value={String(k.unitsSold)} icon={Package} />
       </div>
       <p className="text-xs px-1" style={{ color: 'var(--muted)' }}>
-        Beneficio neto (tras {eur(k.expenses)} de gastos generales): <b style={{ color: k.netProfit >= 0 ? '#22c55e' : '#ef4444' }}>{eur(k.netProfit)}</b>
+        Coste de mercancía {eur(k.cogs)} · Beneficio neto (tras {eur(k.expenses)} de gastos): <b style={{ color: k.netProfit >= 0 ? '#22c55e' : '#ef4444' }}>{eur(k.netProfit)}</b>
       </p>
-      <Section title="Beneficio por producto" subtitle="Con su margen %">
-        <HBars items={byProfit.map(p => ({ label: p.name, value: p.profit, sub: pct(p.marginPct) }))} color="#22c55e" />
-      </Section>
-      <Section title="Detalle de márgenes">
-        <Table head={['Producto', 'Ingresos', 'Coste', 'Beneficio', 'Margen']} align={[0, 1, 1, 1, 1]}
-          rows={byProfit.map(p => [p.name, eur(p.revenue), eur(p.cogs), eur(p.profit), pct(p.marginPct)])} />
-      </Section>
-    </div>
-  )
-}
 
-// ---------- CLIENTES ----------
-function Clientes({ data, range }: { data: BillingData; range: { from: string; to: string } }) {
-  if (!hasSales(data, range.from, range.to)) return <EmptyState icon={Users} title="Sin clientes en este periodo" hint="Aquí verás quién compra y cuánto gasta cada cliente." />
-  const clients = byClient(data.orders, range.from, range.to)
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
-        <KpiCard label="Clientes activos" value={String(clients.length)} icon={Users} hero />
-        <KpiCard label="Gasto total" value={eur(clients.reduce((s, c) => s + c.revenue, 0))} icon={Euro} />
-      </div>
-      <Section title="Ranking por gasto">
-        <HBars items={clients.map(c => ({ label: c.name, value: c.revenue, sub: `${c.orders} ped.` }))} />
+      <Section title="Ranking por ingresos" subtitle="Productos que más facturan">
+        <HBars items={prods.map(p => ({ label: p.name, value: p.revenue, sub: `${p.units} ud` }))} />
       </Section>
-      <Section title="Detalle por cliente">
+
+      <Section title="Por categoría">
+        <HBars items={cats.map(c => ({ label: c.category, value: c.revenue, sub: `${c.units} ud` }))} color="#3b82f6" />
+      </Section>
+
+      <Section title="Detalle por producto" subtitle="Ventas, coste y margen de cada producto">
+        <Table head={['Producto', 'Uds', 'Ingresos', 'Coste', 'Beneficio', 'Margen']} align={[0, 1, 1, 1, 1, 1]}
+          rows={prods.map(p => [p.name, String(p.units), eur(p.revenue), eur(p.cogs), eur(p.profit), pct(p.marginPct)])} />
+      </Section>
+
+      <Section title="Por cliente" subtitle="Quién compra y cuánto gasta">
         <Table head={['Cliente', 'Pedidos', 'Gastado', 'Ticket medio']} align={[0, 1, 1, 1]}
           rows={clients.map(c => [c.name, String(c.orders), eur(c.revenue), eur(c.avgTicket)])} />
       </Section>
-    </div>
-  )
-}
-
-// ---------- CAJA ----------
-function Caja({ data, range }: { data: BillingData; range: { from: string; to: string } }) {
-  if (!hasSales(data, range.from, range.to)) return <EmptyState icon={Coins} title="Sin movimientos de caja" hint="Aquí verás el efectivo cobrado y los cambios entregados cuando haya pedidos entregados." />
-  const c = cashSummary(data.orders, range.from, range.to)
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiCard label="Efectivo cobrado" value={eur(c.collected)} icon={Coins} accent="#22c55e" hero />
-        <KpiCard label="Cambios entregados" value={eur(c.changeGiven)} icon={Wallet} accent="#f59e0b" />
-        <KpiCard label="Exactos / con cambio" value={`${c.exactCount} / ${c.withChangeCount}`} icon={Receipt} />
-      </div>
-      <p className="text-xs px-1" style={{ color: 'var(--muted)' }}>
-        El efectivo neto que entra en caja es lo cobrado ({eur(c.collected)}); los cambios ya están descontados de lo que recibes de cada cliente.
-      </p>
     </div>
   )
 }
