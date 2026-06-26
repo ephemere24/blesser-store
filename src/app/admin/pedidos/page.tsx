@@ -157,7 +157,7 @@ export default function AdminOrdersPage() {
                   </p>
                   {order.pickupDate && order.pickupTime && (
                     <p className="text-xs mt-1 font-medium" style={{ color: 'var(--accent2)' }}>
-                      📅 Recogida: {new Date(order.pickupDate + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })} a las {order.pickupTime}
+                      Recogida: {new Date(order.pickupDate + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })} a las {order.pickupTime}
                     </p>
                   )}
                 </div>
@@ -248,7 +248,7 @@ export default function AdminOrdersPage() {
 
               {order.note && (
                 <p className="text-xs mb-3 p-2 rounded-lg" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                  📝 {order.note}
+                  Nota: {order.note}
                 </p>
               )}
 

@@ -27,13 +27,13 @@ interface BillingData { orders: BillingOrder[]; purchases: BillingPurchase[]; ex
 type Sub = 'resumen' | 'ventas' | 'beneficios' | 'inventario' | 'costes' | 'clientes' | 'caja' | 'pedidos' | 'informes'
 const SUBS: { key: Sub; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { key: 'resumen', label: 'Resumen', icon: LineChart },
-  { key: 'ventas', label: 'Ventas', icon: Receipt },
-  { key: 'beneficios', label: 'Beneficios', icon: PiggyBank },
-  { key: 'inventario', label: 'Inventario', icon: Boxes },
-  { key: 'costes', label: 'Costes', icon: Wallet },
-  { key: 'clientes', label: 'Clientes', icon: Users },
-  { key: 'caja', label: 'Caja', icon: Coins },
   { key: 'pedidos', label: 'Pedidos', icon: ClipboardList },
+  { key: 'ventas', label: 'Ventas', icon: Receipt },
+  { key: 'clientes', label: 'Clientes', icon: Users },
+  { key: 'costes', label: 'Costes', icon: Wallet },
+  { key: 'inventario', label: 'Inventario', icon: Boxes },
+  { key: 'beneficios', label: 'Beneficios', icon: PiggyBank },
+  { key: 'caja', label: 'Caja', icon: Coins },
   { key: 'informes', label: 'Informes', icon: FileBarChart },
 ]
 const SUB_DESC: Record<Sub, string> = {
@@ -789,7 +789,7 @@ function InventoryDetail({ row, lots, onBack, onMutate }: {
         </div>
         {!stats.recovered && (
           <p className="text-sm mb-2" style={{ color: 'var(--accent)' }}>
-            🎯 Faltan <b style={{ color: 'var(--accent2)' }}>{stats.unitsToBreakEven} uds</b> por vender para recuperar la inversión.
+            Faltan <b style={{ color: 'var(--accent2)' }}>{stats.unitsToBreakEven} uds</b> por vender para recuperar la inversión.
           </p>
         )}
         <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--surface2)' }}>

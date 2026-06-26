@@ -257,7 +257,7 @@ export default function AgendaTab() {
                     <span className="font-semibold" style={{ color: 'var(--accent2)' }}>{it.quantity}×</span> {it.productName}{it.flavorName ? ` — ${it.flavorName}` : ''}
                   </p>
                 ))}
-                {o.note && <p className="text-xs mt-2 pt-2" style={{ color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>📝 {o.note}</p>}
+                {o.note && <p className="text-xs mt-2 pt-2" style={{ color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>Nota: {o.note}</p>}
               </div>
 
               {/* Pago en efectivo / cambio a preparar */}
@@ -273,13 +273,13 @@ export default function AgendaTab() {
                 if (change > 0) return (
                   <div className="mb-2 px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between"
                        style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--success)' }}>
-                    <span>💵 Paga con {o.payWith}€</span>
+                    <span>Paga con {o.payWith}€</span>
                     <span>Cambio: {change.toFixed(2)}€</span>
                   </div>
                 )
                 return (
                   <div className="mb-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                    💵 Pago exacto (sin cambio)
+                    Pago exacto (sin cambio)
                   </div>
                 )
               })()}

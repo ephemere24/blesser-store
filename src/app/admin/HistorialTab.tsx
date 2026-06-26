@@ -288,7 +288,7 @@ export default function HistorialTab() {
                               </p>
                             ))}
                           </div>
-                          {o.note && <p className="text-xs mt-2.5 px-2.5 py-2 rounded-lg" style={{ background: 'var(--surface2)', color: 'rgba(255,255,255,0.6)' }}>📝 {o.note}</p>}
+                          {o.note && <p className="text-xs mt-2.5 px-2.5 py-2 rounded-lg" style={{ background: 'var(--surface2)', color: 'rgba(255,255,255,0.6)' }}>Nota: {o.note}</p>}
                         </div>
                       </div>
                     )
