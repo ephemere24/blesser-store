@@ -85,7 +85,7 @@ export default function HistorialTab() {
 
   async function deleteSelected() {
     if (selected.size === 0) return
-    if (!confirm(`¿Eliminar ${selected.size} pedido(s) del historial? No se puede deshacer.`)) return
+    if (!confirm(`¿Eliminar ${selected.size} pedido(s)? Se devolverá su stock al inventario. No se puede deshacer.`)) return
     await fetch('/api/admin/orders', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [...selected] }) })
     setSelected(new Set()); load()
   }

@@ -75,6 +75,20 @@ async function adjustSaleUnits(productId: number, onSale: boolean, delta: number
   })
 }
 
+// Devuelve al inventario (stock + unidades de oferta) lo que consumió un pedido.
+// Se usa al ELIMINAR un pedido. Los cancelados ya devolvieron su stock al cancelarse,
+// así que se omiten para no duplicar la devolución.
+export async function restoreOrderStock(order: {
+  status: string
+  items: { flavorId: number | null; productId: number | null; onSale: boolean; quantity: number }[]
+}) {
+  if (order.status === 'cancelled') return
+  for (const i of order.items) {
+    if (i.flavorId) await adjustStock(i.flavorId, -i.quantity)
+    if (i.productId) await adjustSaleUnits(i.productId, i.onSale, -i.quantity)
+  }
+}
+
 /**
  * Aplica una operación de edición a un pedido. Reajusta el stock y el total.
  * Lanza OrderEditError si algo no es válido.

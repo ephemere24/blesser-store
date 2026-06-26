@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAdminToken } from '@/lib/auth'
+import { restoreOrderStock } from '@/lib/orders'
 
 function requireAdmin(req: NextRequest) {
   const token = req.cookies.get('bs_admin')?.value
@@ -26,10 +27,13 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!requireAdmin(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const { id, ids } = await req.json()
-  if (Array.isArray(ids) && ids.length > 0) {
-    await prisma.order.deleteMany({ where: { id: { in: ids } } })
-  } else if (id) {
-    await prisma.order.delete({ where: { id } })
-  }
+  const targetIds: number[] = Array.isArray(ids) && ids.length > 0 ? ids : (id ? [id] : [])
+  if (targetIds.length === 0) return NextResponse.json({ ok: true })
+
+  // Antes de borrar, devolver el stock de cada pedido (los cancelados ya lo devolvieron).
+  const orders = await prisma.order.findMany({ where: { id: { in: targetIds } }, include: { items: true } })
+  for (const o of orders) await restoreOrderStock(o)
+
+  await prisma.order.deleteMany({ where: { id: { in: targetIds } } })
   return NextResponse.json({ ok: true })
 }
