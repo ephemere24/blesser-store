@@ -81,6 +81,8 @@ model Purchase {
   id          Int      @id @default(autoincrement())
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId   Int
+  flavor      Flavor?  @relation(fields: [flavorId], references: [id], onDelete: SetNull)
+  flavorId    Int?     // sabor al que se sumó el stock (si aplica)
   units       Int
   productCost Float    // coste del producto en este lote (total, no por unidad)
   shipping    Float    @default(0)
@@ -109,6 +111,7 @@ model Flavor {
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId Int
   cartItems CartItem[]
+  purchases Purchase[]
 }
 
 model Cart {

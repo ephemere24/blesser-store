@@ -19,7 +19,7 @@ export interface BillingOrder {
   payWith: number | null
   items: BillingOrderItem[]
 }
-export interface BillingPurchase extends PurchaseLot { productId: number }
+export interface BillingPurchase extends PurchaseLot { productId: number; date: string }
 export interface BillingExpense { id: number; category: string; amount: number; date: string }
 export interface BillingProduct { id: number; name: string; category: string | null; price: number }
 

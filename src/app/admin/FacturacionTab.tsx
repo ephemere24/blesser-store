@@ -4,24 +4,32 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Plus, Trash2, Package, Receipt, TrendingUp, TrendingDown, Wallet, Users, PiggyBank,
   ClipboardList, FileBarChart, Download, Euro, Percent, ShoppingBag, Coins, LineChart, Layers,
+  Boxes, Target, ChevronRight, ArrowLeft, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
 import HistorialTab from './HistorialTab'
 import { EvolutionChart, HBars } from './Charts'
 import { lotTotal, lotUnitCost, weightedUnitCost } from '@/lib/costing'
+import { computeProductStats } from '@/lib/inventory'
+import { effectivePrice } from '@/lib/price'
 import {
   unitCostMap, computeKpis, byProduct, byCategory, byClient, monthlySeries, cashSummary, monthProjection,
   presetRange, previousRange, pctChange,
   BillingOrder, BillingPurchase, BillingExpense, BillingProduct, Preset, Kpis,
 } from '@/lib/billing'
 
-interface ProductRef { id: number; name: string }
+interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
+interface ProductRef {
+  id: number; name: string; price: number; category?: string
+  flavors: Flavor[]; onSale: boolean; salePrice: number | null; saleEndsAt: string | null; saleUnits: number | null
+}
 interface BillingData { orders: BillingOrder[]; purchases: BillingPurchase[]; expenses: BillingExpense[]; products: BillingProduct[] }
 
-type Sub = 'resumen' | 'ventas' | 'beneficios' | 'costes' | 'clientes' | 'caja' | 'pedidos' | 'informes'
+type Sub = 'resumen' | 'ventas' | 'beneficios' | 'inventario' | 'costes' | 'clientes' | 'caja' | 'pedidos' | 'informes'
 const SUBS: { key: Sub; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { key: 'resumen', label: 'Resumen', icon: LineChart },
   { key: 'ventas', label: 'Ventas', icon: Receipt },
   { key: 'beneficios', label: 'Beneficios', icon: PiggyBank },
+  { key: 'inventario', label: 'Inventario', icon: Boxes },
   { key: 'costes', label: 'Costes', icon: Wallet },
   { key: 'clientes', label: 'Clientes', icon: Users },
   { key: 'caja', label: 'Caja', icon: Coins },
@@ -32,7 +40,8 @@ const SUB_DESC: Record<Sub, string> = {
   resumen: 'Visión general del negocio en el periodo seleccionado.',
   ventas: 'Qué se ha vendido, por producto y categoría.',
   beneficios: 'Margen y beneficio real teniendo en cuenta los costes.',
-  costes: 'Registra tus compras por lotes y los gastos generales.',
+  inventario: 'Stock, inversión y rentabilidad de cada producto en tiempo real.',
+  costes: 'Registra tus compras (suman al stock) y los gastos generales.',
   clientes: 'Quién compra y cuánto gasta.',
   caja: 'Efectivo cobrado y cambios entregados.',
   pedidos: 'Historial completo de pedidos.',
@@ -45,7 +54,7 @@ const PRESETS: { key: Preset; label: string }[] = [
 const eur = (n: number) => `${n.toFixed(2)} €`
 const pct = (n: number) => `${n.toFixed(1)}%`
 
-export default function FacturacionTab({ products }: { products: ProductRef[] }) {
+export default function FacturacionTab({ products, onProductsChange }: { products: ProductRef[]; onProductsChange?: () => void }) {
   const [sub, setSub] = useState<Sub>('resumen')
   const [data, setData] = useState<BillingData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,7 +70,8 @@ export default function FacturacionTab({ products }: { products: ProductRef[] })
 
   const costMap = useMemo(() => data ? unitCostMap(data.purchases) : new Map<number, number>(), [data])
   const range = useMemo(() => presetRange(preset, ref), [preset, ref])
-  const showPeriod = sub !== 'costes' && sub !== 'pedidos' && sub !== 'informes'
+  const showPeriod = sub !== 'costes' && sub !== 'pedidos' && sub !== 'informes' && sub !== 'inventario'
+  const refreshAll = useCallback(() => { loadBilling(); onProductsChange?.() }, [loadBilling, onProductsChange])
   const active = SUBS.find(s => s.key === sub)!
 
   return (
@@ -121,7 +131,8 @@ export default function FacturacionTab({ products }: { products: ProductRef[] })
           {sub === 'clientes' && <Clientes data={data} range={range} />}
           {sub === 'caja' && <Caja data={data} range={range} />}
           {sub === 'informes' && <Informes data={data} costMap={costMap} />}
-          {sub === 'costes' && <CostesSection products={products} onMutate={loadBilling} />}
+          {sub === 'inventario' && <Inventario products={products} data={data} onMutate={refreshAll} />}
+          {sub === 'costes' && <CostesSection products={products} onMutate={refreshAll} />}
           {sub === 'pedidos' && <HistorialTab />}
         </>
       )}
@@ -432,9 +443,10 @@ function Table({ head, rows, align = [] }: { head: string[]; rows: string[][]; a
 
 // ---------- COSTES ----------
 interface Purchase {
-  id: number; productId: number; units: number; productCost: number
+  id: number; productId: number; flavorId: number | null; units: number; productCost: number
   shipping: number; insurance: number; otherCosts: number; note: string | null; date: string
   product: { id: number; name: string }
+  flavor?: { id: number; name: string } | null
 }
 interface Expense { id: number; category: string; amount: number; description: string | null; date: string }
 
@@ -487,30 +499,36 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
   unitCostByProduct: Map<number, { name: string; units: number; unit: number }>; onChange: () => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
-  const [form, setForm] = useState({ productId: '', units: '', productCost: '', shipping: '', insurance: '', otherCosts: '', date: today, note: '' })
+  const [form, setForm] = useState({ productId: '', units: '', productCost: '', date: today, note: '', flavorId: '', addToStock: true })
   const [saving, setSaving] = useState(false)
+
+  const product = products.find(p => String(p.id) === form.productId)
+  const flavors = product?.flavors ?? []
+  const autoFlavor = flavors.length === 1 ? flavors[0] : null
 
   const liveUnit = useMemo(() => {
     const units = Number(form.units)
     if (!units || units <= 0) return null
-    return lotUnitCost({ units, productCost: Number(form.productCost) || 0, shipping: Number(form.shipping) || 0, insurance: Number(form.insurance) || 0, otherCosts: Number(form.otherCosts) || 0 })
-  }, [form])
+    return lotUnitCost({ units, productCost: Number(form.productCost) || 0, shipping: 0, insurance: 0, otherCosts: 0 })
+  }, [form.units, form.productCost])
 
   async function add() {
     if (!form.productId) { alert('Elige un producto'); return }
     if (!form.units || Number(form.units) <= 0) { alert('Indica las unidades'); return }
-    if (form.productCost === '' || Number(form.productCost) < 0) { alert('Indica el coste del producto'); return }
+    if (form.productCost === '' || Number(form.productCost) < 0) { alert('Indica el coste total'); return }
+    const flavorId = form.flavorId ? Number(form.flavorId) : (autoFlavor?.id ?? null)
+    if (form.addToStock && flavors.length > 0 && flavorId == null) { alert('Elige el sabor al que sumar el stock'); return }
     setSaving(true)
     const res = await fetch('/api/admin/purchases', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: Number(form.productId), units: Number(form.units), productCost: Number(form.productCost), shipping: Number(form.shipping) || 0, insurance: Number(form.insurance) || 0, otherCosts: Number(form.otherCosts) || 0, date: form.date, note: form.note }),
+      body: JSON.stringify({ productId: Number(form.productId), units: Number(form.units), productCost: Number(form.productCost), date: form.date, note: form.note, flavorId, addToStock: form.addToStock }),
     })
     setSaving(false)
-    if (res.ok) { setForm({ productId: '', units: '', productCost: '', shipping: '', insurance: '', otherCosts: '', date: today, note: '' }); onChange() }
+    if (res.ok) { setForm({ productId: '', units: '', productCost: '', date: today, note: '', flavorId: '', addToStock: true }); onChange() }
     else { const e = await res.json().catch(() => ({})); alert(e.error || 'No se pudo guardar') }
   }
   async function del(id: number) {
-    if (!confirm('¿Eliminar este lote de compra?')) return
+    if (!confirm('¿Eliminar este lote de compra? (no resta el stock que sumó)')) return
     const res = await fetch(`/api/admin/purchases/${id}`, { method: 'DELETE' })
     if (res.ok) onChange()
   }
@@ -518,27 +536,51 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
   const inpStyle = { background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }
 
   return (
-    <Section title="Compras (lotes)" subtitle="El coste/unidad se calcula con envío, seguro y otros gastos del lote">
+    <Section title="Registrar una compra" subtitle="Pon el coste total (con envío y seguros ya sumados). Suma el stock al sabor que elijas.">
       <div className="rounded-xl p-4 mb-4 space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <select value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value }))} className={inp} style={inpStyle}>
+          <select value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value, flavorId: '' }))} className={inp} style={inpStyle}>
             <option value="">Producto…</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className={inp} style={{ ...inpStyle, colorScheme: 'dark' }} />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          <LabeledInput label="Unidades" value={form.units} onChange={v => setForm(f => ({ ...f, units: v }))} />
-          <LabeledInput label="Coste producto €" value={form.productCost} onChange={v => setForm(f => ({ ...f, productCost: v }))} />
-          <LabeledInput label="Envío €" value={form.shipping} onChange={v => setForm(f => ({ ...f, shipping: v }))} />
-          <LabeledInput label="Seguro €" value={form.insurance} onChange={v => setForm(f => ({ ...f, insurance: v }))} />
-          <LabeledInput label="Otros €" value={form.otherCosts} onChange={v => setForm(f => ({ ...f, otherCosts: v }))} />
+        <div className="grid grid-cols-2 gap-2">
+          <LabeledInput label="Cantidad (uds)" value={form.units} onChange={v => setForm(f => ({ ...f, units: v }))} />
+          <LabeledInput label="Coste total €" value={form.productCost} onChange={v => setForm(f => ({ ...f, productCost: v }))} />
         </div>
+
+        {/* Sumar al stock + sabor */}
+        {form.productId && (
+          <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            {flavors.length === 0 ? (
+              <p className="text-xs flex items-center gap-1.5" style={{ color: '#f59e0b' }}>
+                <AlertTriangle size={13} /> Este producto no tiene sabores. Añádelos en Catálogo para poder sumar stock.
+              </p>
+            ) : (
+              <>
+                <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--accent)' }}>
+                  <input type="checkbox" checked={form.addToStock} onChange={e => setForm(f => ({ ...f, addToStock: e.target.checked }))} />
+                  Sumar estas unidades al stock
+                </label>
+                {form.addToStock && (autoFlavor ? (
+                  <p className="text-xs" style={{ color: 'var(--muted)' }}>→ Se sumará a: <b style={{ color: 'var(--accent2)' }}>{autoFlavor.name}</b></p>
+                ) : (
+                  <select value={form.flavorId} onChange={e => setForm(f => ({ ...f, flavorId: e.target.value }))} className={inp} style={inpStyle}>
+                    <option value="">Elige el sabor…</option>
+                    {flavors.map(f => <option key={f.id ?? f.name} value={f.id}>{f.name} ({f.stock} uds)</option>)}
+                  </select>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
         <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Nota (opcional)" className={inp} style={inpStyle} />
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-sm" style={{ color: 'var(--muted)' }}>{liveUnit != null ? <>Coste/unidad de este lote: <b style={{ color: 'var(--accent2)' }}>{eur(liveUnit)}</b></> : 'Coste/unidad: —'}</span>
+          <span className="text-sm" style={{ color: 'var(--muted)' }}>{liveUnit != null ? <>Coste/unidad: <b style={{ color: 'var(--accent2)' }}>{eur(liveUnit)}</b></> : 'Coste/unidad: —'}</span>
           <button onClick={add} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-            <Plus size={14} /> {saving ? 'Guardando…' : 'Añadir lote'}
+            <Plus size={14} /> {saving ? 'Guardando…' : 'Registrar compra'}
           </button>
         </div>
       </div>
@@ -564,7 +606,7 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
           {purchases.map(p => (
             <div key={p.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{p.product.name}</p>
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{p.product.name}{p.flavor ? <span style={{ color: 'var(--muted)' }}> · {p.flavor.name}</span> : ''}</p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{p.date} · {p.units} ud · {eur(lotTotal(p))} ({eur(lotUnitCost(p))}/ud){p.note ? ` · ${p.note}` : ''}</p>
               </div>
               <button onClick={() => del(p.id)} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}><Trash2 size={14} /></button>
@@ -636,6 +678,167 @@ function LabeledInput({ label, value, onChange }: { label: string; value: string
       <label className="text-[10px] block mb-1" style={{ color: 'var(--muted)' }}>{label}</label>
       <input type="number" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)}
         className="px-2 py-2 rounded-lg text-sm outline-none w-full" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+    </div>
+  )
+}
+
+// ---------- INVENTARIO / RENTABILIDAD POR PRODUCTO ----------
+function Inventario({ products, data, onMutate }: { products: ProductRef[]; data: BillingData; onMutate: () => void }) {
+  const [openId, setOpenId] = useState<number | null>(null)
+
+  // Líneas vendidas por producto (pedidos entregados)
+  const soldByProduct = useMemo(() => {
+    const m = new Map<number, { price: number; quantity: number }[]>()
+    for (const o of data.orders) {
+      if (o.status !== 'completed') continue
+      for (const it of o.items) {
+        if (it.productId == null) continue
+        const arr = m.get(it.productId) || []; arr.push({ price: it.price, quantity: it.quantity }); m.set(it.productId, arr)
+      }
+    }
+    return m
+  }, [data.orders])
+
+  const purchasesByProduct = useMemo(() => {
+    const m = new Map<number, typeof data.purchases>()
+    for (const p of data.purchases) { const arr = m.get(p.productId) || []; arr.push(p); m.set(p.productId, arr) }
+    return m
+  }, [data.purchases])
+
+  // Productos con compras o ventas
+  const rows = useMemo(() => {
+    return products
+      .map(p => {
+        const lots = purchasesByProduct.get(p.id) || []
+        const sold = soldByProduct.get(p.id) || []
+        if (lots.length === 0 && sold.length === 0) return null
+        const stats = computeProductStats(lots, sold.map(s => ({ productId: p.id, price: s.price, quantity: s.quantity })), effectivePrice(p))
+        const stockLeft = p.flavors.reduce((s, f) => s + (f.stock || 0), 0)
+        return { product: p, stats, stockLeft }
+      })
+      .filter((x): x is { product: ProductRef; stats: ReturnType<typeof computeProductStats>; stockLeft: number } => x != null)
+      .sort((a, b) => a.stats.netPosition - b.stats.netPosition) // primero los que faltan por recuperar
+  }, [products, purchasesByProduct, soldByProduct])
+
+  if (openId != null) {
+    const row = rows.find(r => r.product.id === openId)
+    if (row) return <InventoryDetail row={row} lots={purchasesByProduct.get(openId) || []} onBack={() => setOpenId(null)} onMutate={onMutate} />
+  }
+
+  if (rows.length === 0) return (
+    <EmptyState icon={Boxes} title="Aún no hay productos con compras" hint="Registra una compra en la pestaña Costes y aquí verás su inversión, stock y rentabilidad." />
+  )
+
+  return (
+    <div className="space-y-2">
+      {rows.map(({ product, stats, stockLeft }) => (
+        <button key={product.id} onClick={() => setOpenId(product.id)}
+          className="w-full text-left rounded-2xl p-4 flex items-center gap-3 cursor-pointer transition-all hover:opacity-90"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold truncate" style={{ color: 'var(--accent2)' }}>{product.name}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+              Invertido {eur(stats.invested)} · {stockLeft} en stock · {stats.unitsSold} vendidas
+            </p>
+          </div>
+          <span className="text-xs font-semibold px-2 py-1 rounded-lg shrink-0"
+            style={{ background: stats.recovered ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: stats.recovered ? '#22c55e' : '#ef4444' }}>
+            {stats.recovered ? `+${eur(stats.netPosition)}` : `−${eur(Math.abs(stats.netPosition))}`}
+          </span>
+          <ChevronRight size={16} style={{ color: 'var(--muted)' }} className="shrink-0" />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function InventoryDetail({ row, lots, onBack, onMutate }: {
+  row: { product: ProductRef; stats: ReturnType<typeof computeProductStats>; stockLeft: number }
+  lots: BillingPurchase[]; onBack: () => void; onMutate: () => void
+}) {
+  const { product, stats, stockLeft } = row
+
+  async function adjustStock(flavorId: number, name: string, current: number) {
+    const input = prompt(`Corregir stock de «${name}» (defectuosos, regalos, recuento).\nUnidades reales:`, String(current))
+    if (input == null) return
+    const n = Math.max(0, Math.floor(Number(input)))
+    if (isNaN(n)) { alert('Número inválido'); return }
+    const res = await fetch(`/api/admin/flavors/${flavorId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stock: n }),
+    })
+    if (res.ok) onMutate(); else alert('No se pudo ajustar')
+  }
+
+  return (
+    <div className="space-y-5">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: 'var(--muted)' }}>
+        <ArrowLeft size={15} /> Volver al inventario
+      </button>
+      <div>
+        <h3 className="text-lg font-bold" style={{ color: 'var(--accent2)' }}>{product.name}</h3>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>Precio de venta actual: {eur(stats.salePrice)}</p>
+      </div>
+
+      {/* Posición / break-even */}
+      <div className="rounded-2xl p-5" style={{ background: stats.recovered ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.07)', border: `1px solid ${stats.recovered ? '#22c55e' : '#ef4444'}` }}>
+        <div className="flex items-center gap-2 mb-2">
+          {stats.recovered ? <CheckCircle2 size={18} style={{ color: '#22c55e' }} /> : <Target size={18} style={{ color: '#ef4444' }} />}
+          <p className="font-bold" style={{ color: stats.recovered ? '#22c55e' : '#ef4444' }}>
+            {stats.recovered ? `Inversión recuperada · +${eur(stats.netPosition)}` : `Aún en negativo · −${eur(Math.abs(stats.netPosition))}`}
+          </p>
+        </div>
+        {!stats.recovered && (
+          <p className="text-sm mb-2" style={{ color: 'var(--accent)' }}>
+            🎯 Faltan <b style={{ color: 'var(--accent2)' }}>{stats.unitsToBreakEven} uds</b> por vender para recuperar la inversión.
+          </p>
+        )}
+        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--surface2)' }}>
+          <div className="h-full rounded-full" style={{ width: `${stats.progressPct}%`, background: stats.recovered ? '#22c55e' : '#f59e0b' }} />
+        </div>
+        <p className="text-xs mt-1.5" style={{ color: 'var(--muted)' }}>{stats.progressPct.toFixed(0)}% de la inversión recuperada ({eur(stats.revenue)} de {eur(stats.invested)})</p>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <KpiCard label="Inversión total" value={eur(stats.invested)} icon={Coins} accent="#f59e0b" />
+        <KpiCard label="Coste medio/ud" value={eur(stats.costPerUnit)} icon={Layers} accent="#f59e0b" />
+        <KpiCard label="Stock restante" value={`${stockLeft} uds`} icon={Boxes} />
+        <KpiCard label="Unidades vendidas" value={`${stats.unitsSold}`} icon={ShoppingBag} />
+        <KpiCard label="Ingresos" value={eur(stats.revenue)} icon={Euro} />
+        <KpiCard label="Beneficio/ud" value={eur(stats.profitPerUnit)} icon={TrendingUp} accent="#22c55e" />
+      </div>
+      <p className="text-xs px-1" style={{ color: 'var(--muted)' }}>
+        Margen por unidad: <b style={{ color: 'var(--accent2)' }}>{pct(stats.marginPct)}</b> · Beneficio contable de lo vendido: <b style={{ color: stats.realizedProfit >= 0 ? '#22c55e' : '#ef4444' }}>{eur(stats.realizedProfit)}</b>
+      </p>
+
+      {/* Stock por sabor + corregir */}
+      <Section title="Stock por sabor" subtitle="«Corregir» ajusta las unidades reales (defectuosos, regalos, recuento) sin tocar la inversión">
+        {product.flavors.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>Este producto no tiene sabores.</p>
+        ) : (
+          <div className="space-y-2">
+            {product.flavors.map(f => (
+              <div key={f.id ?? f.name} className="flex items-center justify-between gap-3 rounded-xl p-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                <span className="text-sm" style={{ color: 'var(--accent)' }}>{f.name}</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-sm font-semibold tabular-nums" style={{ color: f.stock > 0 ? 'var(--accent2)' : 'var(--danger)' }}>{f.stock} uds</span>
+                  <button onClick={() => f.id != null && adjustStock(f.id, f.name, f.stock)} className="text-xs px-2.5 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent)' }}>Corregir</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* Compras */}
+      <Section title="Compras registradas">
+        {lots.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>Sin compras registradas.</p>
+        ) : (
+          <Table head={['Fecha', 'Uds', 'Coste', 'Coste/ud']} align={[0, 1, 1, 1]}
+            rows={lots.map(l => [(l as BillingPurchase & { date?: string }).date || '—', String(l.units), eur(lotTotal(l)), eur(lotUnitCost(l))])} />
+        )}
+      </Section>
     </div>
   )
 }

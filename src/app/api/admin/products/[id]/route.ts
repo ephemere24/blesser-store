@@ -16,12 +16,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { flavors, id: _id, createdAt, updatedAt, ...productData } = data
 
-  // Los sabores pueden venir con id/productId de la BD — los limpiamos.
-  // La disponibilidad (inStock) se deriva del stock.
-  const cleanFlavors = flavors?.map(({ name, stock }: { name: string; stock?: number }) => {
-    const units = Math.max(0, Math.floor(Number(stock) || 0))
-    return { name, stock: units, inStock: units > 0 }
-  })
+  // Reconciliación de sabores POR ID (no borrar/recrear): así se conserva el STOCK,
+  // que se gestiona desde Facturación, y los enlaces de compras/pedidos.
+  // - Sabor con id  → solo actualizamos el nombre (el stock NO se toca aquí).
+  // - Sabor sin id  → nuevo, empieza con stock 0 (se rellena con una compra).
+  // - Sabores que el admin quitó → se eliminan.
+  let flavorOps: object | undefined = undefined
+  if (Array.isArray(flavors)) {
+    const incoming = flavors as { id?: number; name: string }[]
+    const keepIds = incoming.filter(f => f.id).map(f => Number(f.id))
+    flavorOps = {
+      deleteMany: keepIds.length ? { id: { notIn: keepIds } } : {},
+      update: incoming.filter(f => f.id).map(f => ({ where: { id: Number(f.id) }, data: { name: String(f.name) } })),
+      create: incoming.filter(f => !f.id).map(f => ({ name: String(f.name), stock: 0, inStock: false })),
+    }
+  }
 
   const product = await prisma.product.update({
     where: { id: Number(id) },
@@ -38,9 +47,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       saleUnits: productData.onSale && productData.saleUnits != null ? Math.max(0, Math.floor(Number(productData.saleUnits))) : null,
       position: Number(productData.position),
       images: String(productData.images ?? '[]'),
-      flavors: cleanFlavors
-        ? { deleteMany: {}, create: cleanFlavors }
-        : undefined,
+      flavors: flavorOps,
     },
     include: { flavors: true },
   })

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: 'asc' },
     }),
-    prisma.purchase.findMany({ select: { productId: true, units: true, productCost: true, shipping: true, insurance: true, otherCosts: true } }),
+    prisma.purchase.findMany({ select: { productId: true, units: true, productCost: true, shipping: true, insurance: true, otherCosts: true, date: true } }),
     prisma.expense.findMany({ select: { id: true, category: true, amount: true, date: true } }),
     prisma.product.findMany({ select: { id: true, name: true, category: true, price: true } }),
   ])

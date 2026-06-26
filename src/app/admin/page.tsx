@@ -305,16 +305,6 @@ export default function AdminPage() {
     setFlavorInput('')
   }
 
-  function setFlavorStock(idx: number, stock: number) {
-    const safe = Math.max(0, Math.floor(stock || 0))
-    setModal(m => ({
-      ...m,
-      product: {
-        ...m.product,
-        flavors: m.product.flavors.map((f, i) => i === idx ? { ...f, stock: safe, inStock: safe > 0 } : f)
-      }
-    }))
-  }
 
   function removeFlavor(idx: number) {
     setModal(m => ({
@@ -414,7 +404,7 @@ export default function AdminPage() {
         {tab === 'horario' && <HorarioTab />}
 
         {/* FACTURACIÓN */}
-        {tab === 'facturacion' && <FacturacionTab products={products} />}
+        {tab === 'facturacion' && <FacturacionTab products={products} onProductsChange={loadProducts} />}
 
         {/* PRODUCTOS */}
         {tab === 'products' && (
@@ -682,20 +672,16 @@ export default function AdminPage() {
                                    color: f.stock > 0 ? 'var(--success)' : 'var(--danger)' }}>
                       {f.stock > 0 ? 'En stock' : 'Agotado'}
                     </span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>uds</span>
-                      <input
-                        type="number" min={0} value={f.stock}
-                        onChange={e => setFlavorStock(i, Number(e.target.value))}
-                        className="w-16 px-2 py-1 rounded-lg text-sm text-center outline-none"
-                        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
-                    </div>
+                    <span className="text-xs tabular-nums" style={{ color: 'var(--muted)' }}>{f.stock} uds</span>
                     <button onClick={() => removeFlavor(i)} style={{ color: 'var(--danger)' }} className="cursor-pointer">
                       <Trash2 size={12} />
                     </button>
                   </div>
                 ))}
               </div>
+              <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
+                <Package size={12} /> El stock se gestiona en <b>Facturación</b> (compras lo suman, ventas lo restan; ajustes en Inventario).
+              </p>
             </div>
 
             <div className="flex gap-3 pt-2">

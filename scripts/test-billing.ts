@@ -5,16 +5,17 @@ import {
   BillingOrder, BillingPurchase, BillingExpense,
 } from '../src/lib/billing'
 
+const D = '2026-01-01'
 const purchases: BillingPurchase[] = [
-  { productId: 7, units: 50, productCost: 400, shipping: 30, insurance: 10, otherCosts: 10 },
-  { productId: 7, units: 20, productCost: 180, shipping: 20, insurance: 0, otherCosts: 0 },
-  { productId: 9, units: 40, productCost: 300, shipping: 25, insurance: 0, otherCosts: 0 },
-  { productId: 10, units: 25, productCost: 250, shipping: 20, insurance: 0, otherCosts: 0 },
-  { productId: 11, units: 100, productCost: 150, shipping: 20, insurance: 0, otherCosts: 0 },
-  { productId: 12, units: 30, productCost: 270, shipping: 15, insurance: 0, otherCosts: 0 },
-  { productId: 13, units: 40, productCost: 80, shipping: 10, insurance: 0, otherCosts: 0 },
-  { productId: 14, units: 60, productCost: 90, shipping: 10, insurance: 0, otherCosts: 5 },
-  { productId: 16, units: 50, productCost: 100, shipping: 10, insurance: 0, otherCosts: 0 },
+  { productId: 7, units: 50, productCost: 400, shipping: 30, insurance: 10, otherCosts: 10, date: D },
+  { productId: 7, units: 20, productCost: 180, shipping: 20, insurance: 0, otherCosts: 0, date: D },
+  { productId: 9, units: 40, productCost: 300, shipping: 25, insurance: 0, otherCosts: 0, date: D },
+  { productId: 10, units: 25, productCost: 250, shipping: 20, insurance: 0, otherCosts: 0, date: D },
+  { productId: 11, units: 100, productCost: 150, shipping: 20, insurance: 0, otherCosts: 0, date: D },
+  { productId: 12, units: 30, productCost: 270, shipping: 15, insurance: 0, otherCosts: 0, date: D },
+  { productId: 13, units: 40, productCost: 80, shipping: 10, insurance: 0, otherCosts: 0, date: D },
+  { productId: 14, units: 60, productCost: 90, shipping: 10, insurance: 0, otherCosts: 5, date: D },
+  { productId: 16, units: 50, productCost: 100, shipping: 10, insurance: 0, otherCosts: 0, date: D },
 ]
 const expenses: BillingExpense[] = [
   { id: 1, category: 'Transporte', amount: 45, date: '2026-05-30' },
