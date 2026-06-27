@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { gsap } from 'gsap'
 import { Check, UserPlus } from 'lucide-react'
+import StarBorder from '@/components/StarBorder'
 import SiteBackground from '@/components/SiteBackground'
 
 export default function LoginPage() {
@@ -186,13 +187,14 @@ export default function LoginPage() {
           <p className="text-center text-sm mb-3" style={{ color: 'var(--accent)' }}>
             ¿Primera vez aquí? Necesitas un código para entrar
           </p>
-          <button
+          <StarBorder
             onClick={() => { setShowRequest(true); setReqDone(false); setReqError('') }}
-            className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2"
-            style={{ background: 'transparent', color: 'var(--accent2)', border: '1.5px solid var(--accent2)' }}
+            className="w-full"
+            innerClassName="w-full py-3.5 text-sm font-semibold"
+            innerStyle={{ background: 'var(--surface)', color: 'var(--accent2)', border: '1px solid var(--border)' }}
           >
             <UserPlus size={16} /> Solicitar acceso
-          </button>
+          </StarBorder>
         </div>
 
         <p ref={footerRef} className="text-center text-xs mt-8" style={{ color: 'var(--muted)' }}>

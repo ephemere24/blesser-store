@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, Minus, Heart, Share2 } from 'lucide-react'
+import StarBorder from '@/components/StarBorder'
 import { gsap } from 'gsap'
 import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
@@ -366,14 +367,16 @@ export default function ProductPage() {
                   <Plus size={16} />
                 </button>
               </div>
-              <button ref={btnRef}
+              <StarBorder ref={btnRef}
                 onClick={addToCart}
                 disabled={adding}
-                className="flex-1 py-3 rounded-2xl font-semibold text-sm transition-colors disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer"
-                style={{ background: added ? '#22c55e' : 'var(--accent2)', color: 'var(--bg)' }}>
+                className="flex-1"
+                color={added ? '#22c55e' : 'var(--accent2)'}
+                innerClassName="w-full py-3 text-sm font-semibold"
+                innerStyle={{ background: added ? '#22c55e' : 'var(--surface)', color: added ? 'var(--bg)' : 'var(--accent2)', border: '1px solid var(--border)' }}>
                 <ShoppingCart size={16} />
                 {added ? '✓ Añadido' : adding ? 'Añadiendo...' : activeOrderId ? 'Añadir a pedido' : 'Añadir al carrito'}
-              </button>
+              </StarBorder>
             </div>
           )}
           {inStockFlavors.length === 0 && (

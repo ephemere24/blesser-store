@@ -36,6 +36,13 @@ body {
 }
 .bs-rise { animation: bs-rise 0.45s var(--ease-out) both; }
 
+/* Star Border — botón con borde animado (adaptado de ReactBits) */
+.bs-star { position: absolute; width: 300%; height: 50%; opacity: 0.7; border-radius: 9999px; z-index: 0; pointer-events: none; }
+.bs-star-bottom { bottom: -11px; right: -250%; animation: bs-star-bottom linear infinite alternate; }
+.bs-star-top { top: -10px; left: -250%; animation: bs-star-top linear infinite alternate; }
+@keyframes bs-star-bottom { 0% { transform: translate(0%, 0%); opacity: 1; } 100% { transform: translate(-100%, 0%); opacity: 0; } }
+@keyframes bs-star-top { 0% { transform: translate(0%, 0%); opacity: 1; } 100% { transform: translate(100%, 0%); opacity: 0; } }
+
 /* Feedback de pulsación en todos los botones (estilo Emil) */
 button:not(:disabled) { transition: transform 0.13s var(--ease-out); }
 button:not(:disabled):active { transform: scale(0.97); }
@@ -50,4 +57,5 @@ button:not(:disabled):active { transform: scale(0.97); }
   .bs-rise { animation: none; }
   button:not(:disabled):active { transform: none; }
   .product-card:hover { transform: none; }
+  .bs-star { animation: none; opacity: 0; }
 }
