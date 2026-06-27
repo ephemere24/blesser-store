@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Plus, Trash2, Package, Receipt, TrendingUp, TrendingDown, Wallet, PiggyBank,
   ClipboardList, FileBarChart, Download, Euro, Percent, ShoppingBag, Coins, LineChart, Layers,
-  Boxes, Target, ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Pencil, X, Check,
+  Boxes, Target, ChevronRight, ChevronLeft, ChevronDown, ArrowLeft, CheckCircle2, Pencil, X, Check,
 } from 'lucide-react'
 import HistorialTab from './HistorialTab'
 import { EvolutionChart, HBars, DailyBars, Sparkline } from './Charts'
@@ -507,6 +507,7 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
   const [note, setNote] = useState('')
   const [variants, setVariants] = useState<VariantRow[]>([{ flavorId: null, name: '', units: '', cost: '' }])
   const [saving, setSaving] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
 
   const inp = 'px-3 py-2 rounded-lg text-sm outline-none w-full'
   const inpStyle = { background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }
@@ -631,6 +632,11 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
       {purchases.length === 0 ? (
         <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>Aún no hay compras registradas.</p>
       ) : (
+        <>
+        <button onClick={() => setShowHistory(s => !s)} className="flex items-center gap-2 text-xs font-semibold tracking-wide mb-2 cursor-pointer" style={{ color: 'var(--muted)' }}>
+          {showHistory ? <ChevronDown size={14} /> : <ChevronRight size={14} />} HISTORIAL DE COMPRAS ({purchases.length})
+        </button>
+        {showHistory && (
         <div className="space-y-2">
           {purchases.map(p => (
             <div key={p.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
@@ -642,6 +648,8 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
             </div>
           ))}
         </div>
+        )}
+        </>
       )}
     </Section>
   )
