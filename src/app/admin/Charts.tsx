@@ -109,74 +109,75 @@ export function DailyBars({ data }: { data: { date: string; revenue: number }[] 
   )
 }
 
-// Curva suave estilo "gráfica de bolsa": evolución acumulada en el mes.
-// Línea verde/roja según termine por encima o por debajo de 0, relleno degradado,
-// base punteada en 0 y etiquetas de valor a la derecha + días abajo.
+// Curva suave estilo "gráfica de bolsa" con DOS líneas a la vez: Ingresos y Beneficio.
+// Base punteada en 0, etiquetas de valor a la derecha, etiquetas de tiempo abajo y leyenda.
+const STOCK_COLORS = { revenue: 'var(--accent2)', profit: '#22c55e' }
 export function StockLine({ data, fmt = (v: number) => v.toFixed(0), height = 210 }: {
-  data: { label: string; value: number }[]
+  data: { label: string; revenue: number; profit: number }[]
   fmt?: (v: number) => string
   height?: number
 }) {
   if (data.length < 2) return <ChartEmpty />
   const W = 720, H = height
-  const padT = 16, padB = 24, padL = 6, padR = 52
+  const padT = 16, padB = 24, padL = 6, padR = 60
   const plotW = W - padL - padR
   const n = data.length
-  const values = data.map(d => d.value)
-  let lo = Math.min(0, ...values), hi = Math.max(0, ...values)
+  const all = [...data.map(d => d.revenue), ...data.map(d => d.profit)]
+  let lo = Math.min(0, ...all), hi = Math.max(0, ...all)
   if (lo === hi) { hi += 1; lo -= 1 }
   const padV = (hi - lo) * 0.1
   lo -= padV; hi += padV
   const x = (i: number) => padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1))
   const y = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB)
-  const pts: [number, number][] = data.map((d, i) => [x(i), y(d.value)])
 
-  // Curva suave (Catmull-Rom → Bézier)
-  let line = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
-  for (let i = 0; i < n - 1; i++) {
-    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6
-    line += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`
+  // Curva suave (Catmull-Rom → Bézier) para una serie de valores.
+  const pathOf = (vals: number[]) => {
+    const p: [number, number][] = vals.map((v, i) => [x(i), y(v)])
+    let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6
+      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`
+    }
+    return d
   }
+  const revVals = data.map(d => d.revenue), proVals = data.map(d => d.profit)
   const baseY = H - padB
-  const area = `${line} L ${pts[n - 1][0].toFixed(1)} ${baseY} L ${pts[0][0].toFixed(1)} ${baseY} Z`
-
-  const last = values[n - 1]
-  const up = last >= 0
-  const color = up ? '#22c55e' : '#ef4444'
-  const gid = `sg-${up ? 'up' : 'dn'}`
   const zeroY = lo < 0 && hi > 0 ? y(0) : baseY
   const yLabels = [hi - padV, (hi + lo) / 2, lo + padV]
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', height: 'auto' }}>
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-          <stop offset="100%" stopColor={color} stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      {/* etiquetas de valor a la derecha */}
-      {yLabels.map((v, i) => (
-        <text key={i} x={W - padR + 8} y={y(v) + 4} fontSize="12" fill="var(--muted)">{fmt(v)}</text>
-      ))}
-      {/* base en 0 punteada */}
-      <line x1={padL} x2={W - padR} y1={zeroY} y2={zeroY} stroke="var(--muted)" strokeWidth={1} strokeDasharray="2 4" opacity={0.5} />
-      <path d={area} fill={`url(#${gid})`} />
-      <path d={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={pts[n - 1][0]} cy={pts[n - 1][1]} r={3.5} fill={color} />
-      {/* etiquetas del eje X: ~6 repartidas */}
-      {(() => {
-        const ticks = Math.min(6, n)
-        const seen = new Set<number>()
-        return Array.from({ length: ticks }, (_, t) => (ticks <= 1 ? 0 : Math.round((t * (n - 1)) / (ticks - 1))))
-          .filter(i => !seen.has(i) && (seen.add(i), true))
-          .map(i => (
-            <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize="11" fill="var(--muted)">{data[i].label}</text>
-          ))
-      })()}
-    </svg>
+    <div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', height: 'auto' }}>
+        {/* etiquetas de valor a la derecha */}
+        {yLabels.map((v, i) => (
+          <text key={i} x={W - padR + 8} y={y(v) + 4} fontSize="12" fill="var(--muted)">{fmt(v)}</text>
+        ))}
+        {/* base en 0 punteada */}
+        <line x1={padL} x2={W - padR} y1={zeroY} y2={zeroY} stroke="var(--muted)" strokeWidth={1} strokeDasharray="2 4" opacity={0.5} />
+        {/* línea de ingresos */}
+        <path d={pathOf(revVals)} fill="none" stroke={STOCK_COLORS.revenue} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <circle cx={x(n - 1)} cy={y(revVals[n - 1])} r={3.5} fill={STOCK_COLORS.revenue} />
+        {/* línea de beneficio */}
+        <path d={pathOf(proVals)} fill="none" stroke={STOCK_COLORS.profit} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <circle cx={x(n - 1)} cy={y(proVals[n - 1])} r={3.5} fill={STOCK_COLORS.profit} />
+        {/* etiquetas del eje X: ~6 repartidas */}
+        {(() => {
+          const ticks = Math.min(6, n)
+          const seen = new Set<number>()
+          return Array.from({ length: ticks }, (_, t) => (ticks <= 1 ? 0 : Math.round((t * (n - 1)) / (ticks - 1))))
+            .filter(i => !seen.has(i) && (seen.add(i), true))
+            .map(i => (
+              <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize="11" fill="var(--muted)">{data[i].label}</text>
+            ))
+        })()}
+      </svg>
+      <div className="flex gap-4 mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: STOCK_COLORS.revenue }} /> Ingresos</span>
+        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: STOCK_COLORS.profit }} /> Beneficio</span>
+      </div>
+    </div>
   )
 }
 

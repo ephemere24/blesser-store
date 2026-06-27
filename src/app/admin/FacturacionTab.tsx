@@ -214,12 +214,11 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: '1y', label: '1A' }, { key: 'max', label: 'Máx' },
 ]
 
-// Valor (ingreso o beneficio) de una línea de pedido completado.
-function itemValue(it: { productId: number | null; price: number; quantity: number }, costMap: Map<number, number>, metric: 'profit' | 'revenue'): number {
-  const rev = it.price * it.quantity
-  if (metric === 'revenue') return rev
+// Ingreso y beneficio de una línea de pedido completado.
+function itemValues(it: { productId: number | null; price: number; quantity: number }, costMap: Map<number, number>): { revenue: number; profit: number } {
+  const revenue = it.price * it.quantity
   const uc = it.productId != null ? (costMap.get(it.productId) ?? 0) : 0
-  return rev - uc * it.quantity
+  return { revenue, profit: revenue - uc * it.quantity }
 }
 
 // "Hoy" a medianoche UTC, consistente con createdAt.slice(0,10) (UTC) que usa todo billing.
@@ -237,13 +236,14 @@ function periodRange(period: Period, now: Date, firstDate: string): { from: stri
   return { from: ymd(from), to }
 }
 
-// Serie acumulada "estilo bolsa" del periodo: buckets por hora (1D), día (1S/1M) o mes (1A/Máx).
-function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metric: 'profit' | 'revenue', period: Period, now: Date): { label: string; value: number }[] {
+// Serie acumulada "estilo bolsa" del periodo (ingresos + beneficio): buckets por hora (1D), día (1S/1M) o mes (1A/Máx).
+function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, period: Period, now: Date): { label: string; revenue: number; profit: number }[] {
   const completed = orders.filter(o => o.status === 'completed')
   const today = todayUTC(now)
-  const buckets: { key: string; label: string; value: number }[] = []
+  const buckets: { key: string; label: string; revenue: number; profit: number }[] = []
   const idx = new Map<string, number>()
-  const push = (key: string, label: string) => { idx.set(key, buckets.length); buckets.push({ key, label, value: 0 }) }
+  const push = (key: string, label: string) => { idx.set(key, buckets.length); buckets.push({ key, label, revenue: 0, profit: 0 }) }
+  const addTo = (i: number, o: BillingOrder) => { for (const it of o.items) { const v = itemValues(it, costMap); buckets[i].revenue += v.revenue; buckets[i].profit += v.profit } }
 
   if (period === '1d') {
     for (let h = 0; h < 24; h++) push(String(h), `${h}:00`)
@@ -251,7 +251,7 @@ function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metri
     for (const o of completed) {
       if (o.createdAt.slice(0, 10) !== td) continue
       const i = idx.get(String(new Date(o.createdAt).getHours()))
-      if (i != null) for (const it of o.items) buckets[i].value += itemValue(it, costMap, metric)
+      if (i != null) addTo(i, o)
     }
   } else if (period === '1w' || period === '1m') {
     const days = period === '1w' ? 7 : 30
@@ -261,7 +261,7 @@ function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metri
     }
     for (const o of completed) {
       const i = idx.get(o.createdAt.slice(0, 10))
-      if (i != null) for (const it of o.items) buckets[i].value += itemValue(it, costMap, metric)
+      if (i != null) addTo(i, o)
     }
   } else {
     let start: Date
@@ -276,40 +276,35 @@ function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metri
     }
     for (const o of completed) {
       const i = idx.get(o.createdAt.slice(0, 7))
-      if (i != null) for (const it of o.items) buckets[i].value += itemValue(it, costMap, metric)
+      if (i != null) addTo(i, o)
     }
   }
-  let acc = 0
-  return buckets.map(b => { acc += b.value; return { label: b.label, value: acc } })
+  let accR = 0, accP = 0
+  return buckets.map(b => { accR += b.revenue; accP += b.profit; return { label: b.label, revenue: accR, profit: accP } })
 }
 
 function Resumen({ data, costMap }: { data: BillingData; costMap: Map<number, number> }) {
   const now = useMemo(() => new Date(), [])
   const [period, setPeriod] = useState<Period>('1m')
-  const [metric, setMetric] = useState<'profit' | 'revenue'>('profit')
 
-  const series = useMemo(() => stockSeries(data.orders, costMap, metric, period, now),
-    [data.orders, costMap, metric, period, now])
+  const series = useMemo(() => stockSeries(data.orders, costMap, period, now),
+    [data.orders, costMap, period, now])
   const firstDate = useMemo(() => data.orders.filter(o => o.status === 'completed').map(o => o.createdAt.slice(0, 10)).sort()[0] || ymd(now),
     [data.orders, now]) // eslint-disable-line react-hooks/exhaustive-deps
   const range = periodRange(period, now, firstDate)
   const k = computeKpis(data.orders, costMap, data.expenses, range.from, range.to)
-  const lastCum = series.length ? series[series.length - 1].value : 0
+  const lastRev = series.length ? series[series.length - 1].revenue : 0
+  const lastPro = series.length ? series[series.length - 1].profit : 0
 
   return (
     <div className="space-y-5">
-      {/* Curva acumulada estilo bolsa con selector 1D · 1S · 1M · 1A · Máx */}
-      <Section title={metric === 'profit' ? 'Beneficio' : 'Ingresos'} subtitle="Evolución acumulada del periodo">
-        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <span className="text-2xl font-bold tabular-nums" style={{ color: lastCum >= 0 ? '#22c55e' : '#ef4444' }}>
-            {lastCum >= 0 ? '+' : ''}{eur(lastCum)}
+      {/* Curva acumulada estilo bolsa (ingresos + beneficio) con selector 1D · 1S · 1M · 1A · Máx */}
+      <Section title="Ingresos y beneficio" subtitle="Evolución acumulada del periodo">
+        <div className="flex items-baseline gap-4 mb-3 flex-wrap">
+          <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--accent2)' }}>{eur(lastRev)}</span>
+          <span className="text-lg font-bold tabular-nums" style={{ color: lastPro >= 0 ? '#22c55e' : '#ef4444' }}>
+            {lastPro >= 0 ? '+' : ''}{eur(lastPro)} <span className="text-xs font-normal" style={{ color: 'var(--muted)' }}>beneficio</span>
           </span>
-          <div className="flex p-1 rounded-xl shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-            {([['profit', 'Beneficio'], ['revenue', 'Ingresos']] as const).map(([k2, lbl]) => (
-              <button key={k2} onClick={() => setMetric(k2)} className="px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer"
-                style={{ background: metric === k2 ? 'var(--accent2)' : 'transparent', color: metric === k2 ? 'var(--bg)' : 'var(--muted)' }}>{lbl}</button>
-            ))}
-          </div>
         </div>
         <StockLine data={series} fmt={(v) => eur(v)} />
         <div className="flex justify-between mt-3">
