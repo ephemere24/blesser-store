@@ -595,13 +595,15 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
             </button>
           </div>
           {variants.map((v, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input value={v.name} onChange={e => setV(i, { name: e.target.value })} placeholder="Nombre"
+            <div key={i} className="flex flex-col gap-2 rounded-xl p-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <input value={v.name} onChange={e => setV(i, { name: e.target.value })} placeholder="Nombre del sabor/modelo"
                 disabled={mode === 'existing' && v.flavorId != null}
-                className="px-2.5 py-2 rounded-lg text-sm outline-none flex-1 min-w-0 disabled:opacity-70" style={inpStyle} />
-              <input type="number" inputMode="numeric" value={v.units} onChange={e => setV(i, { units: e.target.value })} placeholder="Uds" className="px-2.5 py-2 rounded-lg text-sm outline-none w-20" style={inpStyle} />
-              <input type="number" inputMode="decimal" value={v.cost} onChange={e => setV(i, { cost: e.target.value })} placeholder="Coste €" className="px-2.5 py-2 rounded-lg text-sm outline-none w-24" style={inpStyle} />
-              <button onClick={() => removeVariant(i)} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }} aria-label="Quitar variante"><X size={14} /></button>
+                className="px-2.5 py-2 rounded-lg text-sm outline-none w-full disabled:opacity-70" style={inpStyle} />
+              <div className="flex items-center gap-2">
+                <input type="number" inputMode="numeric" value={v.units} onChange={e => setV(i, { units: e.target.value })} placeholder="Uds" className="px-2.5 py-2 rounded-lg text-sm outline-none flex-1 min-w-0" style={inpStyle} />
+                <input type="number" inputMode="decimal" value={v.cost} onChange={e => setV(i, { cost: e.target.value })} placeholder="Coste €" className="px-2.5 py-2 rounded-lg text-sm outline-none flex-1 min-w-0" style={inpStyle} />
+                <button onClick={() => removeVariant(i)} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }} aria-label="Quitar variante"><X size={14} /></button>
+              </div>
             </div>
           ))}
         </div>
