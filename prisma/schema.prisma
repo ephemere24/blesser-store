@@ -35,6 +35,14 @@ model Setting {
   value String
 }
 
+// Lista gestionable de categorías de producto. Product.category se enlaza por nombre.
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 model Closure {
   id        Int      @id @default(autoincrement())
   date      String   // YYYY-MM-DD
@@ -108,6 +116,7 @@ model Flavor {
   name      String
   inStock   Boolean @default(true)
   stock     Int     @default(0)
+  price     Float?  // override opcional del precio general del producto para esta variante
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId Int
   cartItems CartItem[]

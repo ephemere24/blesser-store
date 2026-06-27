@@ -19,6 +19,14 @@ export function effectivePrice(p: Priceable, now: Date = new Date()): number {
   return isSaleActive(p, now) ? (p.salePrice as number) : p.price
 }
 
+// Precio efectivo de una variante concreta. Si la variante tiene precio propio
+// (override), se usa como precio base; la liquidación (product-level) sigue mandando
+// si está activa. Si no hay override, equivale a effectivePrice del producto.
+export function variantPrice(p: Priceable, flavor?: { price?: number | null } | null, now: Date = new Date()): number {
+  const base: Priceable = flavor?.price != null ? { ...p, price: flavor.price } : p
+  return effectivePrice(base, now)
+}
+
 // Porcentaje de descuento (entero) si hay liquidación activa y válida; null si no.
 export function discountPct(p: Priceable, now: Date = new Date()): number | null {
   if (!isSaleActive(p, now) || p.salePrice == null || p.salePrice >= p.price || p.price <= 0) return null

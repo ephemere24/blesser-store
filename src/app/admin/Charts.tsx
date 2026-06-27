@@ -77,6 +77,59 @@ export function HBars({ items, color = 'var(--accent2)', unit = '€' }: {
   )
 }
 
+// Barras diarias de ingresos (para el Resumen de un mes). Etiqueta cada ~5 días.
+export function DailyBars({ data }: { data: { date: string; revenue: number }[] }) {
+  if (data.length === 0 || data.every(d => d.revenue === 0)) return <ChartEmpty />
+  const max = Math.max(1, ...data.map(d => d.revenue))
+  const H = 150, padT = 14, padB = 22, padX = 6
+  const W = Math.max(320, data.length * 14)
+  const bw = (W - padX * 2) / data.length
+  const y = (v: number) => padT + (1 - v / max) * (H - padT - padB)
+  const baseY = y(0)
+  return (
+    <div className="overflow-x-auto">
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ minWidth: '100%' }}>
+        <line x1={0} x2={W} y1={baseY} y2={baseY} stroke="var(--border)" strokeWidth={1} opacity={0.6} />
+        {data.map((d, i) => {
+          const x = padX + i * bw
+          const day = Number(d.date.slice(8, 10))
+          return (
+            <g key={d.date}>
+              <rect x={x + bw * 0.18} y={y(d.revenue)} width={bw * 0.64} height={Math.max(0, baseY - y(d.revenue))} rx={2} fill="var(--accent2)">
+                <title>{`${d.date}: ${d.revenue.toFixed(2)} €`}</title>
+              </rect>
+              {(day === 1 || day % 5 === 0) && (
+                <text x={x + bw / 2} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--muted)">{day}</text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
+// Mini-gráfico de línea (evolución de la posición neta de un producto, "como una acción").
+export function Sparkline({ values, width = 96, height = 30 }: { values: number[]; width?: number; height?: number }) {
+  if (values.length < 2) return <svg width={width} height={height} />
+  const min = Math.min(...values), max = Math.max(...values)
+  const span = max - min || 1
+  const stepX = width / (values.length - 1)
+  const y = (v: number) => height - 2 - ((v - min) / span) * (height - 4)
+  const pts = values.map((v, i) => `${(i * stepX).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+  const last = values[values.length - 1]
+  const color = last >= 0 ? '#22c55e' : '#ef4444'
+  // Línea base en cero si el rango lo cruza
+  const zeroY = min < 0 && max > 0 ? y(0) : null
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {zeroY != null && <line x1={0} x2={width} y1={zeroY} y2={zeroY} stroke="var(--border)" strokeWidth={1} strokeDasharray="2 2" />}
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={(values.length - 1) * stepX} cy={y(last)} r={2} fill={color} />
+    </svg>
+  )
+}
+
 function ChartEmpty() {
   return <p className="text-sm text-center py-8" style={{ color: 'var(--muted)' }}>Sin datos en este periodo.</p>
 }

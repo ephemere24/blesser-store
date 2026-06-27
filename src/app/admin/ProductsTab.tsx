@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useMemo, DragEvent } from 'react'
-import { Plus, Pencil, Trash2, Eye, EyeOff, GripVertical, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, PackageX, ImageIcon } from 'lucide-react'
+import { Pencil, Trash2, Eye, EyeOff, GripVertical, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, PackageX, ImageIcon } from 'lucide-react'
 import { makeFuse, searchProducts } from '@/lib/search'
 
-interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
+interface Flavor { id?: number; name: string; inStock: boolean; stock: number; price?: number | null }
 export interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; visible: boolean; position: number
@@ -17,9 +17,8 @@ function firstImage(p: Product): string | null {
   try { const a = JSON.parse(p.images || '[]'); return a[0] || null } catch { return null }
 }
 
-export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, onDelete, onReorder }: {
+export default function ProductsTab({ products, onEdit, onToggleVisible, onDelete, onReorder }: {
   products: Product[]
-  onAdd: () => void
   onEdit: (p: Product) => void
   onToggleVisible: (p: Product) => void
   onDelete: (id: number) => void
@@ -90,11 +89,9 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
         <h2 className="font-bold" style={{ color: 'var(--accent2)' }}>
           Catálogo ({products.length})
         </h2>
-        <button onClick={onAdd}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer"
-          style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
-          <Plus size={14} /> Añadir
-        </button>
+        <span className="text-xs text-right max-w-[55%]" style={{ color: 'var(--muted)' }}>
+          Los productos se crean al registrar una compra en <b>Facturación → Gastos</b>.
+        </span>
       </div>
 
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl mb-4"
@@ -117,7 +114,7 @@ export default function ProductsTab({ products, onAdd, onEdit, onToggleVisible, 
         )
       ) : (
         <div className="space-y-4">
-          {groups.length === 0 && soldout.length === 0 && <Empty text="Aún no hay productos. Pulsa «Añadir»." />}
+          {groups.length === 0 && soldout.length === 0 && <Empty text="Aún no hay productos. Regístralos como compra en Facturación → Gastos." />}
 
           {groups.map((g, gi) => {
             const open = expanded.has(g.category)

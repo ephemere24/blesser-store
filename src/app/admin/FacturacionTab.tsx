@@ -4,20 +4,20 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Plus, Trash2, Package, Receipt, TrendingUp, TrendingDown, Wallet, PiggyBank,
   ClipboardList, FileBarChart, Download, Euro, Percent, ShoppingBag, Coins, LineChart, Layers,
-  Boxes, Target, ChevronRight, ArrowLeft, CheckCircle2, AlertTriangle,
+  Boxes, Target, ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Pencil, X, Check,
 } from 'lucide-react'
 import HistorialTab from './HistorialTab'
-import { EvolutionChart, HBars } from './Charts'
+import { EvolutionChart, HBars, DailyBars, Sparkline } from './Charts'
 import { lotTotal, lotUnitCost, weightedUnitCost } from '@/lib/costing'
 import { computeProductStats } from '@/lib/inventory'
 import { effectivePrice } from '@/lib/price'
 import {
-  unitCostMap, computeKpis, byProduct, byCategory, byClient, monthlySeries, cashSummary, monthProjection,
-  presetRange, previousRange, pctChange,
-  BillingOrder, BillingPurchase, BillingExpense, BillingProduct, Preset, Kpis,
+  unitCostMap, computeKpis, byProduct, byCategory, byClient, monthlySeries, dailySeries,
+  presetRange, pctChange,
+  BillingOrder, BillingPurchase, BillingExpense, BillingProduct, Preset,
 } from '@/lib/billing'
 
-interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
+interface Flavor { id?: number; name: string; inStock: boolean; stock: number; price?: number | null }
 interface ProductRef {
   id: number; name: string; price: number; category?: string
   flavors: Flavor[]; onSale: boolean; salePrice: number | null; saleEndsAt: string | null; saleUnits: number | null
@@ -29,15 +29,15 @@ const SUBS: { key: Sub; label: string; icon: React.ComponentType<{ size?: number
   { key: 'resumen', label: 'Resumen', icon: LineChart },
   { key: 'pedidos', label: 'Pedidos', icon: ClipboardList },
   { key: 'ventas', label: 'Ventas', icon: Receipt },
-  { key: 'costes', label: 'Costes', icon: Wallet },
+  { key: 'costes', label: 'Gastos', icon: Wallet },
   { key: 'inventario', label: 'Inventario', icon: Boxes },
   { key: 'informes', label: 'Informes', icon: FileBarChart },
 ]
 const SUB_DESC: Record<Sub, string> = {
-  resumen: 'Visión general del negocio: KPIs, beneficio, caja y evolución.',
+  resumen: 'Visión general del negocio: ventas del mes, beneficio y evolución.',
   pedidos: 'Historial completo de pedidos.',
   ventas: 'Ventas, márgenes y clientes: por producto, categoría y comprador.',
-  costes: 'Registra tus compras (suman al stock) y los gastos generales.',
+  costes: 'Registra tus compras (crean o reabastecen productos) y los gastos generales.',
   inventario: 'Stock, inversión y rentabilidad de cada producto en tiempo real.',
   informes: 'Exporta tus datos para la contabilidad.',
 }
@@ -64,7 +64,7 @@ export default function FacturacionTab({ products, onProductsChange }: { product
 
   const costMap = useMemo(() => data ? unitCostMap(data.purchases) : new Map<number, number>(), [data])
   const range = useMemo(() => presetRange(preset, ref), [preset, ref])
-  const showPeriod = sub !== 'costes' && sub !== 'pedidos' && sub !== 'informes' && sub !== 'inventario'
+  const showPeriod = sub === 'ventas' // Resumen gestiona su propia navegación temporal
   const refreshAll = useCallback(() => { loadBilling(); onProductsChange?.() }, [loadBilling, onProductsChange])
   const active = SUBS.find(s => s.key === sub)!
 
@@ -119,7 +119,7 @@ export default function FacturacionTab({ products, onProductsChange }: { product
         </div>
       ) : (
         <>
-          {sub === 'resumen' && <Resumen data={data} costMap={costMap} preset={preset} refDate={ref} />}
+          {sub === 'resumen' && <Resumen data={data} costMap={costMap} />}
           {sub === 'ventas' && <Ventas data={data} costMap={costMap} range={range} />}
           {sub === 'informes' && <Informes data={data} costMap={costMap} />}
           {sub === 'inventario' && <Inventario products={products} data={data} onMutate={refreshAll} />}
@@ -206,62 +206,83 @@ function hasSales(data: BillingData, from: string, to: string): boolean {
 }
 
 // ---------- RESUMEN ----------
-function Resumen({ data, costMap, preset, refDate }: { data: BillingData; costMap: Map<number, number>; preset: Preset; refDate: Date }) {
-  const range = presetRange(preset, refDate)
-  const k = computeKpis(data.orders, costMap, data.expenses, range.from, range.to)
-  const prevR = previousRange(preset, refDate)
-  const prev: Kpis | null = prevR ? computeKpis(data.orders, costMap, data.expenses, prevR.from, prevR.to) : null
-  const series = monthlySeries(data.orders, costMap, '2000-01-01', '2999-12-31').slice(-12)
-  const proj = preset === 'month' ? monthProjection(data.orders, refDate) : null
-  const cash = cashSummary(data.orders, range.from, range.to)
-  const empty = !hasSales(data, range.from, range.to)
+type Franja = 'day' | 'week' | 'month'
+const FRANJAS: { key: Franja; label: string }[] = [
+  { key: 'day', label: 'Diario' }, { key: 'week', label: 'Semanal' }, { key: 'month', label: 'Mes' },
+]
+const ymd = (d: Date) => d.toISOString().slice(0, 10)
 
-  if (empty) return (
-    <EmptyState icon={LineChart} title="Aún no hay ventas en este periodo"
-      hint="Cuando entregues pedidos aparecerán aquí los ingresos, el beneficio y la evolución. Registra tus costes en la pestaña Costes para ver márgenes reales." />
-  )
+// Rango de la franja anclado al mes mostrado. Si el mes mostrado es el actual, el
+// ancla es hoy; si es un mes pasado/futuro, el ancla es su último día.
+function franjaRange(franja: Franja, refMonth: Date, now: Date): { from: string; to: string } {
+  const monthStart = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1)
+  const monthEnd = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0)
+  const isCurrent = now.getFullYear() === refMonth.getFullYear() && now.getMonth() === refMonth.getMonth()
+  const anchor = isCurrent ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : monthEnd
+  if (franja === 'month') return { from: ymd(monthStart), to: ymd(monthEnd) }
+  if (franja === 'day') return { from: ymd(anchor), to: ymd(anchor) }
+  // week: 7 días terminando en el ancla, sin salir del mes
+  const weekStart = new Date(anchor); weekStart.setDate(anchor.getDate() - 6)
+  return { from: ymd(weekStart < monthStart ? monthStart : weekStart), to: ymd(anchor) }
+}
+
+function Resumen({ data, costMap }: { data: BillingData; costMap: Map<number, number> }) {
+  const now = useMemo(() => new Date(), [])
+  const [refMonth, setRefMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
+  const [franja, setFranja] = useState<Franja>('month')
+
+  const monthStart = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1)
+  const monthEnd = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0)
+  const daily = useMemo(() => dailySeries(data.orders, costMap, ymd(monthStart), ymd(monthEnd)),
+    [data.orders, costMap, refMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+  const fr = franjaRange(franja, refMonth, now)
+  const k = computeKpis(data.orders, costMap, data.expenses, fr.from, fr.to)
+  const monthLabel = refMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const isCurrent = now.getFullYear() === refMonth.getFullYear() && now.getMonth() === refMonth.getMonth()
+  const navMonth = (delta: number) => setRefMonth(m => new Date(m.getFullYear(), m.getMonth() + delta, 1))
 
   return (
     <div className="space-y-5">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiCard label="Ingresos" value={eur(k.revenue)} icon={Euro} hero delta={prev && <Delta cur={k.revenue} prev={prev.revenue} />} />
-        <KpiCard label="Beneficio bruto" value={eur(k.grossProfit)} icon={TrendingUp} accent="#22c55e" delta={prev && <Delta cur={k.grossProfit} prev={prev.grossProfit} />} />
-        <KpiCard label="Beneficio neto" value={eur(k.netProfit)} icon={PiggyBank} accent={k.netProfit >= 0 ? '#22c55e' : '#ef4444'} delta={prev && <Delta cur={k.netProfit} prev={prev.netProfit} />} />
-        <KpiCard label="Margen bruto" value={pct(k.grossMarginPct)} icon={Percent} accent="#3b82f6" />
-        <KpiCard label="Ticket medio" value={eur(k.avgTicket)} icon={Receipt} />
-        <KpiCard label="Pedidos" value={String(k.orderCount)} icon={ShoppingBag} delta={prev && <Delta cur={k.orderCount} prev={prev.orderCount} />} />
-      </div>
-
-      {prev && (
-        <p className="text-xs px-1" style={{ color: 'var(--muted)' }}>
-          vs {prevR!.label}: ingresos {eur(prev.revenue)} · beneficio neto {eur(prev.netProfit)}
-        </p>
-      )}
-
-      {proj && proj.soFar > 0 && (
-        <div className="rounded-2xl p-5 flex items-center justify-between gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div>
-            <p className="text-xs font-semibold tracking-wide mb-1" style={{ color: 'var(--muted)' }}>PROYECCIÓN DEL MES</p>
-            <p className="text-sm" style={{ color: 'var(--accent)' }}>Llevas {eur(proj.soFar)} en {proj.dayOfMonth}/{proj.daysInMonth} días</p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--accent2)' }}>≈ {eur(proj.projected)}</p>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>estimado a fin de mes</p>
-          </div>
+      {/* Gráfico de ventas del mes con navegación < > */}
+      <Section title="Ventas del mes" subtitle={`Ingresos diarios · ${monthLabel}`}>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <button onClick={() => navMonth(-1)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Mes anterior">
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-sm font-semibold capitalize" style={{ color: 'var(--accent2)' }}>{monthLabel}</span>
+          <button onClick={() => navMonth(1)} disabled={isCurrent} className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Mes siguiente">
+            <ChevronRight size={16} />
+          </button>
         </div>
-      )}
-
-      <Section title="Evolución" subtitle="Ingresos y beneficio de los últimos meses">
-        <EvolutionChart data={series} />
+        <DailyBars data={daily} />
       </Section>
 
-      {/* Caja (efectivo del periodo) */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiCard label="Efectivo cobrado" value={eur(cash.collected)} icon={Coins} accent="#22c55e" />
-        <KpiCard label="Cambios entregados" value={eur(cash.changeGiven)} icon={Wallet} accent="#f59e0b" />
-        <KpiCard label="Pagos exactos / con cambio" value={`${cash.exactCount} / ${cash.withChangeCount}`} icon={Receipt} />
+      {/* Fila de datos + selector de franja */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          {franja === 'month' ? `Datos de ${monthLabel}` : franja === 'week' ? 'Datos de los últimos 7 días' : `Datos del ${fr.from}`}
+        </p>
+        <div className="flex p-1 rounded-xl shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+          {FRANJAS.map(f => (
+            <button key={f.key} onClick={() => setFranja(f.key)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+              style={{ background: franja === f.key ? 'var(--accent2)' : 'transparent', color: franja === f.key ? 'var(--bg)' : 'var(--muted)' }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Pedidos" value={String(k.orderCount)} icon={ShoppingBag} />
+        <KpiCard label="Ingreso (bruto)" value={eur(k.revenue)} icon={Euro} hero />
+        <KpiCard label="Beneficio (neto)" value={eur(k.netProfit)} icon={PiggyBank} accent={k.netProfit >= 0 ? '#22c55e' : '#ef4444'} />
+        <KpiCard label="Ticket medio" value={eur(k.avgTicket)} icon={Receipt} />
+      </div>
+
+      <Section title="Evolución" subtitle="Ingresos y beneficio de los últimos meses">
+        <EvolutionChart data={monthlySeries(data.orders, costMap, '2000-01-01', '2999-12-31').slice(-12)} />
+      </Section>
     </div>
   )
 }
@@ -273,6 +294,7 @@ function Ventas({ data, costMap, range }: { data: BillingData; costMap: Map<numb
   const prods = byProduct(data.orders, costMap, range.from, range.to)
   const cats = byCategory(data.orders, costMap, data.products, range.from, range.to)
   const clients = byClient(data.orders, range.from, range.to)
+  const breakeven = breakEvenByProduct(data) // acumulado (toda la vida), no por periodo
 
   return (
     <div className="space-y-5">
@@ -300,12 +322,43 @@ function Ventas({ data, costMap, range }: { data: BillingData; costMap: Map<numb
           rows={prods.map(p => [p.name, String(p.units), eur(p.revenue), eur(p.cogs), eur(p.profit), pct(p.marginPct)])} />
       </Section>
 
+      {breakeven.length > 0 && (
+        <Section title="Para recuperar la inversión" subtitle="Unidades que faltan por vender por producto (acumulado de toda su vida)">
+          <Table head={['Producto', 'Faltan (uds)', 'Recuperado', 'Inversión']} align={[0, 1, 1, 1]}
+            rows={breakeven.map(b => [b.name, b.recovered ? '✓ recuperada' : `${b.unitsToBreakEven} uds`, eur(b.revenue), eur(b.invested)])} />
+        </Section>
+      )}
+
       <Section title="Por cliente" subtitle="Quién compra y cuánto gasta">
         <Table head={['Cliente', 'Pedidos', 'Gastado', 'Ticket medio']} align={[0, 1, 1, 1]}
           rows={clients.map(c => [c.name, String(c.orders), eur(c.revenue), eur(c.avgTicket)])} />
       </Section>
     </div>
   )
+}
+
+// Break-even acumulado por producto (toda la vida): inversión vs ingresos.
+function breakEvenByProduct(data: BillingData): { name: string; invested: number; revenue: number; recovered: boolean; unitsToBreakEven: number }[] {
+  const priceById = new Map(data.products.map(p => [p.id, { name: p.name, price: p.price }]))
+  const lotsByProduct = new Map<number, BillingPurchase[]>()
+  for (const p of data.purchases) { const a = lotsByProduct.get(p.productId) || []; a.push(p); lotsByProduct.set(p.productId, a) }
+  const soldByProduct = new Map<number, { price: number; quantity: number }[]>()
+  for (const o of data.orders) {
+    if (o.status !== 'completed') continue
+    for (const it of o.items) {
+      if (it.productId == null) continue
+      const a = soldByProduct.get(it.productId) || []; a.push({ price: it.price, quantity: it.quantity }); soldByProduct.set(it.productId, a)
+    }
+  }
+  const out: { name: string; invested: number; revenue: number; recovered: boolean; unitsToBreakEven: number }[] = []
+  for (const [pid, lots] of lotsByProduct) {
+    const info = priceById.get(pid)
+    if (!info) continue
+    const sold = soldByProduct.get(pid) || []
+    const stats = computeProductStats(lots, sold.map(s => ({ productId: pid, price: s.price, quantity: s.quantity })), info.price)
+    out.push({ name: info.name, invested: stats.invested, revenue: stats.revenue, recovered: stats.recovered, unitsToBreakEven: stats.unitsToBreakEven })
+  }
+  return out.sort((a, b) => Number(a.recovered) - Number(b.recovered) || b.unitsToBreakEven - a.unitsToBreakEven)
 }
 
 // ---------- INFORMES ----------
@@ -440,37 +493,65 @@ function CostesSection({ products, onMutate }: { products: ProductRef[]; onMutat
   )
 }
 
+interface VariantRow { flavorId: number | null; name: string; units: string; cost: string }
 function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
   products: ProductRef[]; purchases: Purchase[]
   unitCostByProduct: Map<number, { name: string; units: number; unit: number }>; onChange: () => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
-  const [form, setForm] = useState({ productId: '', units: '', productCost: '', date: today, note: '', flavorId: '', addToStock: true })
+  const [mode, setMode] = useState<'new' | 'existing'>('new')
+  const [name, setName] = useState('')
+  const [category, setCategory] = useState('')
+  const [productId, setProductId] = useState('')
+  const [date, setDate] = useState(today)
+  const [note, setNote] = useState('')
+  const [variants, setVariants] = useState<VariantRow[]>([{ flavorId: null, name: '', units: '', cost: '' }])
   const [saving, setSaving] = useState(false)
 
-  const product = products.find(p => String(p.id) === form.productId)
-  const flavors = product?.flavors ?? []
-  const autoFlavor = flavors.length === 1 ? flavors[0] : null
+  const inp = 'px-3 py-2 rounded-lg text-sm outline-none w-full'
+  const inpStyle = { background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }
 
-  const liveUnit = useMemo(() => {
-    const units = Number(form.units)
-    if (!units || units <= 0) return null
-    return lotUnitCost({ units, productCost: Number(form.productCost) || 0, shipping: 0, insurance: 0, otherCosts: 0 })
-  }, [form.units, form.productCost])
+  function reset() {
+    setName(''); setCategory(''); setProductId(''); setDate(today); setNote('')
+    setVariants([{ flavorId: null, name: '', units: '', cost: '' }])
+  }
+
+  // Al elegir un producto existente, precarga sus sabores como variantes a reabastecer
+  function selectProduct(id: string) {
+    setProductId(id)
+    const p = products.find(pr => String(pr.id) === id)
+    if (p && p.flavors.length > 0) {
+      setVariants(p.flavors.map(f => ({ flavorId: f.id ?? null, name: f.name, units: '', cost: '' })))
+    } else {
+      setVariants([{ flavorId: null, name: '', units: '', cost: '' }])
+    }
+  }
+
+  const setV = (i: number, patch: Partial<VariantRow>) => setVariants(vs => vs.map((v, j) => j === i ? { ...v, ...patch } : v))
+  const addVariant = () => setVariants(vs => [...vs, { flavorId: null, name: '', units: '', cost: '' }])
+  const removeVariant = (i: number) => setVariants(vs => vs.length > 1 ? vs.filter((_, j) => j !== i) : vs)
+
+  const liveTotal = useMemo(() => variants.reduce((s, v) => s + (Number(v.cost) || 0), 0), [variants])
+  const liveUnits = useMemo(() => variants.reduce((s, v) => s + (Number(v.units) || 0), 0), [variants])
 
   async function add() {
-    if (!form.productId) { alert('Elige un producto'); return }
-    if (!form.units || Number(form.units) <= 0) { alert('Indica las unidades'); return }
-    if (form.productCost === '' || Number(form.productCost) < 0) { alert('Indica el coste total'); return }
-    const flavorId = form.flavorId ? Number(form.flavorId) : (autoFlavor?.id ?? null)
-    if (form.addToStock && flavors.length > 0 && flavorId == null) { alert('Elige el sabor al que sumar el stock'); return }
+    const clean = variants
+      .map(v => ({ flavorId: v.flavorId, name: v.name.trim(), units: Math.floor(Number(v.units)), cost: Number(v.cost) }))
+      .filter(v => v.units > 0)
+    if (clean.length === 0) { alert('Añade al menos una variante con cantidad'); return }
+    if (clean.some(v => isNaN(v.cost) || v.cost < 0)) { alert('Cada variante con cantidad necesita un coste válido'); return }
+    if (mode === 'new') {
+      if (!name.trim()) { alert('Indica el nombre del producto'); return }
+      if (clean.some(v => !v.name)) { alert('Cada variante necesita un nombre'); return }
+    } else if (!productId) { alert('Elige el producto a reabastecer'); return }
+
     setSaving(true)
-    const res = await fetch('/api/admin/purchases', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: Number(form.productId), units: Number(form.units), productCost: Number(form.productCost), date: form.date, note: form.note, flavorId, addToStock: form.addToStock }),
-    })
+    const body = mode === 'new'
+      ? { mode: 'new', name: name.trim(), category: category || null, date, note, variants: clean.map(v => ({ name: v.name, units: v.units, cost: v.cost })) }
+      : { mode: 'existing', productId: Number(productId), date, note, variants: clean.map(v => ({ flavorId: v.flavorId, name: v.name, units: v.units, cost: v.cost })) }
+    const res = await fetch('/api/admin/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setSaving(false)
-    if (res.ok) { setForm({ productId: '', units: '', productCost: '', date: today, note: '', flavorId: '', addToStock: true }); onChange() }
+    if (res.ok) { reset(); onChange() }
     else { const e = await res.json().catch(() => ({})); alert(e.error || 'No se pudo guardar') }
   }
   async function del(id: number) {
@@ -478,53 +559,55 @@ function PurchaseBlock({ products, purchases, unitCostByProduct, onChange }: {
     const res = await fetch(`/api/admin/purchases/${id}`, { method: 'DELETE' })
     if (res.ok) onChange()
   }
-  const inp = 'px-3 py-2 rounded-lg text-sm outline-none w-full'
-  const inpStyle = { background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }
 
   return (
-    <Section title="Registrar una compra" subtitle="Pon el coste total (con envío y seguros ya sumados). Suma el stock al sabor que elijas.">
+    <Section title="Registrar una compra" subtitle="Crea un producto nuevo (oculto hasta completarlo en Catálogo) o reabastece uno existente. Cada variante con su cantidad y su coste.">
       <div className="rounded-xl p-4 mb-4 space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <select value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value, flavorId: '' }))} className={inp} style={inpStyle}>
-            <option value="">Producto…</option>
+        {/* Modo */}
+        <div className="flex p-1 rounded-xl w-fit" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          {([['new', 'Producto nuevo'], ['existing', 'Reabastecer existente']] as const).map(([k, lbl]) => (
+            <button key={k} onClick={() => { setMode(k); reset() }} className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
+              style={{ background: mode === k ? 'var(--accent2)' : 'transparent', color: mode === k ? 'var(--bg)' : 'var(--muted)' }}>{lbl}</button>
+          ))}
+        </div>
+
+        {mode === 'new' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del producto" className={inp} style={inpStyle} />
+            <CategoryPicker value={category} onChange={setCategory} />
+          </div>
+        ) : (
+          <select value={productId} onChange={e => selectProduct(e.target.value)} className={inp} style={inpStyle}>
+            <option value="">Producto a reabastecer…</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className={inp} style={{ ...inpStyle, colorScheme: 'dark' }} />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <LabeledInput label="Cantidad (uds)" value={form.units} onChange={v => setForm(f => ({ ...f, units: v }))} />
-          <LabeledInput label="Coste total €" value={form.productCost} onChange={v => setForm(f => ({ ...f, productCost: v }))} />
-        </div>
-
-        {/* Sumar al stock + sabor */}
-        {form.productId && (
-          <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            {flavors.length === 0 ? (
-              <p className="text-xs flex items-center gap-1.5" style={{ color: '#f59e0b' }}>
-                <AlertTriangle size={13} /> Este producto no tiene sabores. Añádelos en Catálogo para poder sumar stock.
-              </p>
-            ) : (
-              <>
-                <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--accent)' }}>
-                  <input type="checkbox" checked={form.addToStock} onChange={e => setForm(f => ({ ...f, addToStock: e.target.checked }))} />
-                  Sumar estas unidades al stock
-                </label>
-                {form.addToStock && (autoFlavor ? (
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>→ Se sumará a: <b style={{ color: 'var(--accent2)' }}>{autoFlavor.name}</b></p>
-                ) : (
-                  <select value={form.flavorId} onChange={e => setForm(f => ({ ...f, flavorId: e.target.value }))} className={inp} style={inpStyle}>
-                    <option value="">Elige el sabor…</option>
-                    {flavors.map(f => <option key={f.id ?? f.name} value={f.id}>{f.name} ({f.stock} uds)</option>)}
-                  </select>
-                ))}
-              </>
-            )}
-          </div>
         )}
 
-        <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Nota (opcional)" className={inp} style={inpStyle} />
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} style={{ ...inpStyle, colorScheme: 'dark' }} />
+
+        {/* Variantes */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold tracking-wide" style={{ color: 'var(--muted)' }}>VARIANTES (SABOR/MODELO)</span>
+            <button onClick={addVariant} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+              <Plus size={12} /> Variante
+            </button>
+          </div>
+          {variants.map((v, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={v.name} onChange={e => setV(i, { name: e.target.value })} placeholder="Nombre"
+                disabled={mode === 'existing' && v.flavorId != null}
+                className="px-2.5 py-2 rounded-lg text-sm outline-none flex-1 min-w-0 disabled:opacity-70" style={inpStyle} />
+              <input type="number" inputMode="numeric" value={v.units} onChange={e => setV(i, { units: e.target.value })} placeholder="Uds" className="px-2.5 py-2 rounded-lg text-sm outline-none w-20" style={inpStyle} />
+              <input type="number" inputMode="decimal" value={v.cost} onChange={e => setV(i, { cost: e.target.value })} placeholder="Coste €" className="px-2.5 py-2 rounded-lg text-sm outline-none w-24" style={inpStyle} />
+              <button onClick={() => removeVariant(i)} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }} aria-label="Quitar variante"><X size={14} /></button>
+            </div>
+          ))}
+        </div>
+
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="Nota (opcional)" className={inp} style={inpStyle} />
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-sm" style={{ color: 'var(--muted)' }}>{liveUnit != null ? <>Coste/unidad: <b style={{ color: 'var(--accent2)' }}>{eur(liveUnit)}</b></> : 'Coste/unidad: —'}</span>
+          <span className="text-sm" style={{ color: 'var(--muted)' }}>{liveUnits > 0 ? <>Total: <b style={{ color: 'var(--accent2)' }}>{liveUnits} uds · {eur(liveTotal)}</b></> : 'Total: —'}</span>
           <button onClick={add} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50" style={{ background: 'var(--accent2)', color: 'var(--bg)' }}>
             <Plus size={14} /> {saving ? 'Guardando…' : 'Registrar compra'}
           </button>
@@ -618,12 +701,71 @@ function ExpenseBlock({ expenses, onChange }: { expenses: Expense[]; onChange: (
   )
 }
 
-function LabeledInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+interface Category { id: number; name: string }
+// Selector de categoría gestionable: elegir, crear nueva, renombrar y eliminar.
+export function CategoryPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [cats, setCats] = useState<Category[]>([])
+  const [managing, setManaging] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const inp = 'px-3 py-2 rounded-lg text-sm outline-none w-full'
+  const inpStyle = { background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }
+
+  const load = useCallback(async () => {
+    const c = await fetch('/api/admin/categories').then(r => r.ok ? r.json() : [])
+    setCats(c)
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  async function create() {
+    const n = newName.trim()
+    if (!n) return
+    const res = await fetch('/api/admin/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: n }) })
+    if (res.ok) { setNewName(''); setCreating(false); await load(); onChange(n) }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || 'No se pudo crear') }
+  }
+  async function rename(c: Category) {
+    const n = prompt('Nuevo nombre de la categoría:', c.name)
+    if (n == null || !n.trim() || n.trim() === c.name) return
+    const res = await fetch(`/api/admin/categories/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: n.trim() }) })
+    if (res.ok) { if (value === c.name) onChange(n.trim()); await load() }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || 'No se pudo renombrar') }
+  }
+  async function remove(c: Category) {
+    if (!confirm(`¿Eliminar la categoría «${c.name}»? Los productos que la usaban quedarán sin categoría.`)) return
+    const res = await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE' })
+    if (res.ok) { if (value === c.name) onChange(''); await load() }
+  }
+
   return (
-    <div>
-      <label className="text-[10px] block mb-1" style={{ color: 'var(--muted)' }}>{label}</label>
-      <input type="number" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)}
-        className="px-2 py-2 rounded-lg text-sm outline-none w-full" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <select value={value} onChange={e => onChange(e.target.value)} className={inp} style={inpStyle}>
+          <option value="">Categoría…</option>
+          {cats.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+        </select>
+        <button onClick={() => setCreating(v => !v)} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Nueva categoría"><Plus size={14} /></button>
+        <button onClick={() => setManaging(v => !v)} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Editar categorías"><Pencil size={14} /></button>
+      </div>
+      {creating && (
+        <div className="flex items-center gap-2">
+          <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && create()} placeholder="Nueva categoría" className={inp} style={inpStyle} autoFocus />
+          <button onClick={create} className="p-2 rounded-lg cursor-pointer shrink-0" style={{ background: 'var(--accent2)', color: 'var(--bg)' }} aria-label="Guardar"><Check size={14} /></button>
+        </div>
+      )}
+      {managing && (
+        <div className="rounded-lg p-2 space-y-1" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          {cats.length === 0 ? <p className="text-xs px-1" style={{ color: 'var(--muted)' }}>Sin categorías.</p> : cats.map(c => (
+            <div key={c.id} className="flex items-center justify-between gap-2 text-sm px-1">
+              <span style={{ color: 'var(--accent)' }}>{c.name}</span>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => rename(c)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'var(--surface2)', color: 'var(--accent)' }} aria-label="Renombrar"><Pencil size={12} /></button>
+                <button onClick={() => remove(c)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }} aria-label="Eliminar"><Trash2 size={12} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -651,6 +793,25 @@ function Inventario({ products, data, onMutate }: { products: ProductRef[]; data
     return m
   }, [data.purchases])
 
+  // Evolución de la posición neta por producto (empieza en -inversión y sube con cada venta)
+  const sparkByProduct = useMemo(() => {
+    const sorted = [...data.orders].filter(o => o.status === 'completed').sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const invested = new Map<number, number>()
+    for (const [pid, lots] of purchasesByProduct) invested.set(pid, lots.reduce((s, l) => s + lotTotal(l), 0))
+    const series = new Map<number, number[]>()
+    const running = new Map<number, number>()
+    for (const pid of invested.keys()) { running.set(pid, -(invested.get(pid) || 0)); series.set(pid, [-(invested.get(pid) || 0)]) }
+    for (const o of sorted) {
+      for (const it of o.items) {
+        if (it.productId == null || !series.has(it.productId)) continue
+        const v = (running.get(it.productId) || 0) + it.price * it.quantity
+        running.set(it.productId, v)
+        series.get(it.productId)!.push(v)
+      }
+    }
+    return series
+  }, [data.orders, purchasesByProduct])
+
   // Productos con compras o ventas
   const rows = useMemo(() => {
     return products
@@ -677,23 +838,39 @@ function Inventario({ products, data, onMutate }: { products: ProductRef[]; data
 
   return (
     <div className="space-y-2">
-      {rows.map(({ product, stats, stockLeft }) => (
-        <button key={product.id} onClick={() => setOpenId(product.id)}
-          className="w-full text-left rounded-2xl p-4 flex items-center gap-3 cursor-pointer transition-all hover:opacity-90"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold truncate" style={{ color: 'var(--accent2)' }}>{product.name}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-              Invertido {eur(stats.invested)} · {stockLeft} en stock · {stats.unitsSold} vendidas
-            </p>
-          </div>
-          <span className="text-xs font-semibold px-2 py-1 rounded-lg shrink-0"
-            style={{ background: stats.recovered ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: stats.recovered ? '#22c55e' : '#ef4444' }}>
-            {stats.recovered ? `+${eur(stats.netPosition)}` : `−${eur(Math.abs(stats.netPosition))}`}
-          </span>
-          <ChevronRight size={16} style={{ color: 'var(--muted)' }} className="shrink-0" />
-        </button>
-      ))}
+      {rows.map(({ product, stats, stockLeft }) => {
+        const roiPct = stats.invested > 0 ? (stats.netPosition / stats.invested) * 100 : 0
+        const barColor = stats.recovered ? '#22c55e' : stats.progressPct >= 50 ? '#f59e0b' : '#ef4444'
+        return (
+          <button key={product.id} onClick={() => setOpenId(product.id)}
+            className="w-full text-left rounded-2xl p-4 cursor-pointer transition-all hover:opacity-90"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold truncate" style={{ color: 'var(--accent2)' }}>{product.name}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                  Invertido {eur(stats.invested)} · {stockLeft} en stock · {stats.unitsSold} vendidas
+                </p>
+              </div>
+              <Sparkline values={sparkByProduct.get(product.id) || []} />
+              <div className="text-right shrink-0">
+                <span className="text-xs font-semibold px-2 py-1 rounded-lg block"
+                  style={{ background: stats.recovered ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: stats.recovered ? '#22c55e' : '#ef4444' }}>
+                  {stats.recovered ? `+${eur(stats.netPosition)}` : `−${eur(Math.abs(stats.netPosition))}`}
+                </span>
+                <span className="text-[10px] tabular-nums" style={{ color: stats.netPosition >= 0 ? '#22c55e' : '#ef4444' }}>
+                  {roiPct >= 0 ? '+' : ''}{roiPct.toFixed(0)}%
+                </span>
+              </div>
+              <ChevronRight size={16} style={{ color: 'var(--muted)' }} className="shrink-0" />
+            </div>
+            {/* Barra de progreso de recuperación */}
+            <div className="h-1.5 rounded-full overflow-hidden mt-3" style={{ background: 'var(--surface2)' }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(2, stats.progressPct)}%`, background: barColor }} />
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }

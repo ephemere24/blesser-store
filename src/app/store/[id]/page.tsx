@@ -6,11 +6,11 @@ import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, Minus, Heart, Share2 } from 'lucide-react'
 import StarBorder from '@/components/StarBorder'
 import { gsap } from 'gsap'
-import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
+import { effectivePrice, discountPct, isSaleActive, variantPrice } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
 import SiteBackground from '@/components/SiteBackground'
 
-interface Flavor { id: number; name: string; inStock: boolean; stock: number }
+interface Flavor { id: number; name: string; inStock: boolean; stock: number; price?: number | null }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
@@ -186,7 +186,8 @@ export default function ProductPage() {
   async function shareProduct() {
     if (!product) return
     const url = window.location.href
-    const price = effectivePrice(product)
+    const sel = product.flavors.find(f => f.id === selectedFlavor) ?? null
+    const price = variantPrice(product, sel)
     const text = `Mira este producto en Blesser Store: ${product.name} — ${price}€`
     if (navigator.share) {
       try { await navigator.share({ title: product.name, text, url }) } catch { /* cancelado */ }
@@ -239,6 +240,16 @@ export default function ProductPage() {
   const outOfStockFlavors = product.flavors.filter(f => !f.inStock)
   const images: string[] = JSON.parse(product.images || '[]')
 
+  // Precio mostrado: el de la variante seleccionada; si no hay selección y los
+  // precios varían entre variantes, mostramos «desde {mínimo}».
+  const selFlavor = product.flavors.find(f => f.id === selectedFlavor) ?? null
+  const variantPrices = inStockFlavors.map(f => variantPrice(product, f))
+  const pricesVary = new Set(variantPrices).size > 1
+  const displayPrice = selFlavor ? variantPrice(product, selFlavor)
+    : pricesVary ? Math.min(...variantPrices)
+    : effectivePrice(product)
+  const showFrom = !selFlavor && pricesVary
+
   return (
     <>
     <SiteBackground />
@@ -283,10 +294,12 @@ export default function ProductPage() {
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold leading-tight" style={{ color: 'var(--accent2)' }}>{product.name}</h1>
             <div className="text-right shrink-0">
-              {discountPct(product) != null && (
+              {discountPct(product) != null && !selFlavor && !pricesVary && (
                 <span className="block text-sm line-through" style={{ color: 'var(--muted)' }}>{product.price} €</span>
               )}
-              <span className="text-2xl font-bold" style={{ color: discountPct(product) != null ? '#f87171' : 'var(--accent2)' }}>{effectivePrice(product)} €</span>
+              <span className="text-2xl font-bold" style={{ color: discountPct(product) != null && !selFlavor && !pricesVary ? '#f87171' : 'var(--accent2)' }}>
+                {showFrom && <span className="text-sm font-medium" style={{ color: 'var(--muted)' }}>desde </span>}{displayPrice} €
+              </span>
             </div>
           </div>
 

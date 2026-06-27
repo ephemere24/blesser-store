@@ -7,7 +7,7 @@ import { ShoppingCart, LogOut, Package, Plus, Minus, Trash2, CheckCircle2, Clock
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { getPickupDays, getTimeSlots, formatDayLabel } from '@/lib/pickup'
-import { effectivePrice, discountPct, isSaleActive } from '@/lib/price'
+import { effectivePrice, discountPct, isSaleActive, variantPrice } from '@/lib/price'
 import SaleCountdown from '@/components/SaleCountdown'
 import SiteBackground from '@/components/SiteBackground'
 import { makeFuse, searchProducts, splitHighlight } from '@/lib/search'
@@ -15,7 +15,7 @@ import { suggestedBills, changeFor } from '@/lib/cash'
 
 gsap.registerPlugin(ScrollTrigger)
 
-interface Flavor { id: number; name: string; inStock: boolean; stock: number }
+interface Flavor { id: number; name: string; inStock: boolean; stock: number; price?: number | null }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; images: string; flavors: Flavor[]
@@ -272,7 +272,7 @@ export default function StorePage() {
   }
 
   const cartCount = cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0
-  const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0) ?? 0
+  const cartTotal = cart?.items.reduce((s, i) => s + i.quantity * variantPrice(i.product, i.flavor), 0) ?? 0
   const orderCount = orderItems.reduce((s, i) => s + i.quantity, 0)
   const badgeCount = activeOrder ? orderCount : cartCount
 
@@ -433,8 +433,11 @@ export default function StorePage() {
               const autoFlavor = inStockFlavors.length === 1 ? (inStockFlavors[0].id ?? null) : null
               const selected = selectedFlavors[product.id] ?? autoFlavor
               const imgs: string[] = JSON.parse(product.images || '[]')
-              const eff = effectivePrice(product)
-              const pct = discountPct(product)
+              // Precio de tarjeta: si las variantes tienen precios distintos, «desde {mínimo}»
+              const vPrices = inStockFlavors.map(f => variantPrice(product, f))
+              const vary = new Set(vPrices).size > 1
+              const eff = vary ? Math.min(...vPrices) : effectivePrice(product)
+              const pct = vary ? null : discountPct(product)
 
               return (
                 <div key={product.id} className="product-card rounded-2xl overflow-hidden flex flex-col"
@@ -458,7 +461,7 @@ export default function StorePage() {
                       <div className="absolute bottom-3 right-3 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg"
                            style={{ background: 'var(--bg)', color: 'var(--accent2)' }}>
                         {pct != null && <span className="line-through opacity-50 font-medium">{product.price}€</span>}
-                        <span style={{ color: pct != null ? '#f87171' : 'var(--accent2)' }}>{eff}€</span>
+                        <span style={{ color: pct != null ? '#f87171' : 'var(--accent2)' }}>{vary && <span className="opacity-60 font-medium">desde </span>}{eff}€</span>
                       </div>
                     </div>
                   </Link>
@@ -864,7 +867,7 @@ export default function StorePage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--accent2)' }}>{item.product.name}</p>
                         {item.flavor && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.flavor.name}</p>}
-                        <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * effectivePrice(item.product)).toFixed(2)} €</p>
+                        <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--accent)' }}>{(item.quantity * variantPrice(item.product, item.flavor)).toFixed(2)} €</p>
                         <div className="flex items-center gap-2 mt-2">
                           <button onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
                                   className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"

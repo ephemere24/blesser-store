@@ -21,14 +21,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // - Sabor con id  → solo actualizamos el nombre (el stock NO se toca aquí).
   // - Sabor sin id  → nuevo, empieza con stock 0 (se rellena con una compra).
   // - Sabores que el admin quitó → se eliminan.
+  const toPrice = (v: unknown) => (v == null || v === '' || isNaN(Number(v)) ? null : Number(v))
   let flavorOps: object | undefined = undefined
   if (Array.isArray(flavors)) {
-    const incoming = flavors as { id?: number; name: string }[]
+    const incoming = flavors as { id?: number; name: string; price?: number | null }[]
     const keepIds = incoming.filter(f => f.id).map(f => Number(f.id))
     flavorOps = {
       deleteMany: keepIds.length ? { id: { notIn: keepIds } } : {},
-      update: incoming.filter(f => f.id).map(f => ({ where: { id: Number(f.id) }, data: { name: String(f.name) } })),
-      create: incoming.filter(f => !f.id).map(f => ({ name: String(f.name), stock: 0, inStock: false })),
+      // El precio por variante (override) SÍ se actualiza aquí; el stock NO.
+      update: incoming.filter(f => f.id).map(f => ({ where: { id: Number(f.id) }, data: { name: String(f.name), price: toPrice(f.price) } })),
+      create: incoming.filter(f => !f.id).map(f => ({ name: String(f.name), stock: 0, inStock: false, price: toPrice(f.price) })),
     }
   }
 

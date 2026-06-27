@@ -193,6 +193,33 @@ export function monthlySeries(orders: BillingOrder[], costMap: Map<number, numbe
   return [...m.values()].sort((a, b) => a.month.localeCompare(b.month))
 }
 
+// ---- Serie diaria (para el gráfico del Resumen de un mes) ----
+export interface DayPoint { date: string; revenue: number; profit: number; orders: number }
+export function dailySeries(orders: BillingOrder[], costMap: Map<number, number>, from: string, to: string): DayPoint[] {
+  const m = new Map<string, DayPoint>()
+  // Inicializa todos los días del rango a cero para que el gráfico no tenga huecos
+  const start = new Date(from + 'T00:00:00')
+  const end = new Date(to + 'T00:00:00')
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10)
+    m.set(key, { date: key, revenue: 0, profit: 0, orders: 0 })
+  }
+  for (const o of completedInRange(orders, from, to)) {
+    const key = orderDate(o)
+    const cur = m.get(key) || { date: key, revenue: 0, profit: 0, orders: 0 }
+    let rev = 0, cogs = 0
+    for (const it of o.items) {
+      rev += it.price * it.quantity
+      cogs += (costMap.get(it.productId ?? -1) ?? 0) * it.quantity
+    }
+    cur.revenue += rev
+    cur.profit += rev - cogs
+    cur.orders += 1
+    m.set(key, cur)
+  }
+  return [...m.values()].sort((a, b) => a.date.localeCompare(b.date))
+}
+
 // ---- Caja (efectivo) ----
 export interface CashSummary { collected: number; changeGiven: number; exactCount: number; withChangeCount: number }
 export function cashSummary(orders: BillingOrder[], from: string, to: string): CashSummary {

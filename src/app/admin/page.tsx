@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation'
 import { Plus, Trash2, LogOut, Users, Package, Upload, GripVertical, X, ImageIcon, CalendarDays, Clock, Check, BarChart3 } from 'lucide-react'
 import AgendaTab from './AgendaTab'
 import HorarioTab from './HorarioTab'
-import FacturacionTab from './FacturacionTab'
+import FacturacionTab, { CategoryPicker } from './FacturacionTab'
 import ProductsTab from './ProductsTab'
 
-interface Flavor { id?: number; name: string; inStock: boolean; stock: number }
+interface Flavor { id?: number; name: string; inStock: boolean; stock: number; price?: number | null }
 interface Product {
   id: number; name: string; price: number; description: string
   specs: string; category: string; visible: boolean; position: number
@@ -313,6 +313,14 @@ export default function AdminPage() {
     }))
   }
 
+  function setFlavorPrice(idx: number, raw: string) {
+    const price = raw.trim() === '' ? null : Number(raw)
+    setModal(m => ({
+      ...m,
+      product: { ...m.product, flavors: m.product.flavors.map((f, i) => i === idx ? { ...f, price } : f) }
+    }))
+  }
+
   // Mientras se comprueba la sesión guardada
   if (checkingAuth) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
@@ -410,7 +418,6 @@ export default function AdminPage() {
         {tab === 'products' && (
           <ProductsTab
             products={products}
-            onAdd={() => setModal({ open: true, product: { ...emptyProduct } })}
             onEdit={p => setModal({ open: true, product: { ...p } })}
             onToggleVisible={toggleVisible}
             onDelete={deleteProduct}
@@ -521,8 +528,7 @@ export default function AdminPage() {
 
             {[
               { label: 'Nombre', key: 'name', type: 'text' },
-              { label: 'Precio (€)', key: 'price', type: 'number' },
-              { label: 'Categoría', key: 'category', type: 'text' },
+              { label: 'Precio general (€)', key: 'price', type: 'number' },
               { label: 'Especificaciones', key: 'specs', type: 'text' },
               { label: 'Posición (orden)', key: 'position', type: 'number' },
             ].map(({ label, key, type }) => (
@@ -535,6 +541,11 @@ export default function AdminPage() {
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
               </div>
             ))}
+
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted)' }}>Categoría</label>
+              <CategoryPicker value={modal.product.category} onChange={v => setModal(m => ({ ...m, product: { ...m.product, category: v } }))} />
+            </div>
 
             <div>
               <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted)' }}>Descripción</label>
@@ -666,21 +677,23 @@ export default function AdminPage() {
                 {modal.product.flavors.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl"
                        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                    <span className="flex-1 text-sm" style={{ color: 'var(--accent2)' }}>{f.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-lg font-medium"
-                          style={{ background: f.stock > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                                   color: f.stock > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                      {f.stock > 0 ? 'En stock' : 'Agotado'}
-                    </span>
-                    <span className="text-xs tabular-nums" style={{ color: 'var(--muted)' }}>{f.stock} uds</span>
-                    <button onClick={() => removeFlavor(i)} style={{ color: 'var(--danger)' }} className="cursor-pointer">
+                    <span className="flex-1 min-w-0 text-sm truncate" style={{ color: 'var(--accent2)' }}>{f.name}</span>
+                    <input type="number" min={0} step="0.01" inputMode="decimal"
+                      value={f.price ?? ''}
+                      onChange={e => setFlavorPrice(i, e.target.value)}
+                      placeholder={`${modal.product.price} €`}
+                      title="Precio propio de esta variante (vacío = precio general)"
+                      className="w-20 px-2 py-1 rounded-lg text-sm text-center outline-none"
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--accent2)' }} />
+                    <span className="text-xs tabular-nums shrink-0" style={{ color: f.stock > 0 ? 'var(--muted)' : 'var(--danger)' }}>{f.stock} uds</span>
+                    <button onClick={() => removeFlavor(i)} style={{ color: 'var(--danger)' }} className="cursor-pointer shrink-0">
                       <Trash2 size={12} />
                     </button>
                   </div>
                 ))}
               </div>
               <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
-                <Package size={12} /> El stock se gestiona en <b>Facturación</b> (compras lo suman, ventas lo restan; ajustes en Inventario).
+                <Package size={12} /> El stock se gestiona en <b>Facturación</b>. Deja el precio vacío para usar el general; ponlo para esta variante.
               </p>
             </div>
 

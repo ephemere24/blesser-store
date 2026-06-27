@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { applyOrderEdit, confirmOrderDraft, draftFromOrder, notifyOrderChange, OrderEditError, DraftLine } from '@/lib/orders'
 import { isValidPickup } from '@/lib/pickup'
-import { effectivePrice, isSaleActive } from '@/lib/price'
+import { isSaleActive, variantPrice } from '@/lib/price'
 
 type ClientOp =
   | { op: 'addItem'; productId: number; flavorId: number | null; quantity?: number }
@@ -82,10 +82,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const product = await prisma.product.findUnique({ where: { id: body.productId } })
     if (!product) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
     let flavorName: string | null = null
+    let flavor: { price: number | null } | null = null
     if (body.flavorId) {
       const f = await prisma.flavor.findUnique({ where: { id: body.flavorId } })
       if (!f) return NextResponse.json({ error: 'Sabor no encontrado' }, { status: 404 })
       flavorName = f.name
+      flavor = { price: f.price }
     }
     const qty = Math.max(1, Math.floor(body.quantity ?? 1))
     const onSale = isSaleActive(product)
@@ -108,7 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null) && d.onSale === onSale)
     if (idx >= 0) draft[idx].quantity += qty
-    else draft.push({ productId: body.productId, flavorId: body.flavorId ?? null, productName: product.name, flavorName, price: effectivePrice(product), onSale, quantity: qty })
+    else draft.push({ productId: body.productId, flavorId: body.flavorId ?? null, productName: product.name, flavorName, price: variantPrice(product, flavor), onSale, quantity: qty })
   } else if (body.op === 'setQty') {
     const idx = draft.findIndex(d => d.productId === body.productId && d.flavorId === (body.flavorId ?? null) && (body.onSale === undefined || d.onSale === body.onSale))
     if (idx >= 0) {

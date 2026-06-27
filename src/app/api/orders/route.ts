@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { isValidPickup, formatDayLabel } from '@/lib/pickup'
-import { effectivePrice, isSaleActive } from '@/lib/price'
+import { isSaleActive, variantPrice } from '@/lib/price'
 import { consumeSaleUnits } from '@/lib/orders'
 import { changeFor } from '@/lib/cash'
 
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   }
 
   const accessCode = await prisma.accessCode.findUnique({ where: { id: user.codeId } })
-  const total = cart.items.reduce((s, i) => s + i.quantity * effectivePrice(i.product), 0)
+  const total = cart.items.reduce((s, i) => s + i.quantity * variantPrice(i.product, i.flavor), 0)
 
   // Validar pago en efectivo (con cuánto paga)
   const pay: number | null = typeof payWith === 'number' && !isNaN(payWith) ? payWith : null
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
             flavorId: i.flavorId,
             productName: i.product.name,
             flavorName: i.flavor?.name ?? null,
-            price: effectivePrice(i.product),
+            price: variantPrice(i.product, i.flavor),
             onSale: isSaleActive(i.product),
             quantity: i.quantity,
           })),
