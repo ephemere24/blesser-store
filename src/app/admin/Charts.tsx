@@ -150,7 +150,7 @@ export function StockLine({ data, fmt = (v: number) => v.toFixed(0), height = 21
   const yLabels = [hi - padV, (hi + lo) / 2, lo + padV]
 
   return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', height: 'auto' }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity={0.28} />

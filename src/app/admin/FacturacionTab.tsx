@@ -222,22 +222,25 @@ function itemValue(it: { productId: number | null; price: number; quantity: numb
   return rev - uc * it.quantity
 }
 
+// "Hoy" a medianoche UTC, consistente con createdAt.slice(0,10) (UTC) que usa todo billing.
+function todayUTC(now: Date): Date { return new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z') }
+
 // Rango de fechas del periodo (para los KPIs), anclado a hoy.
 function periodRange(period: Period, now: Date, firstDate: string): { from: string; to: string } {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const today = todayUTC(now)
   const to = ymd(today)
   if (period === 'max') return { from: firstDate || '2000-01-01', to }
   const from = new Date(today)
-  if (period === '1w') from.setDate(today.getDate() - 6)
-  else if (period === '1m') from.setDate(today.getDate() - 29)
-  else if (period === '1y') from.setFullYear(today.getFullYear() - 1)
+  if (period === '1w') from.setUTCDate(today.getUTCDate() - 6)
+  else if (period === '1m') from.setUTCDate(today.getUTCDate() - 29)
+  else if (period === '1y') from.setUTCFullYear(today.getUTCFullYear() - 1)
   return { from: ymd(from), to }
 }
 
 // Serie acumulada "estilo bolsa" del periodo: buckets por hora (1D), día (1S/1M) o mes (1A/Máx).
 function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metric: 'profit' | 'revenue', period: Period, now: Date): { label: string; value: number }[] {
   const completed = orders.filter(o => o.status === 'completed')
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const today = todayUTC(now)
   const buckets: { key: string; label: string; value: number }[] = []
   const idx = new Map<string, number>()
   const push = (key: string, label: string) => { idx.set(key, buckets.length); buckets.push({ key, label, value: 0 }) }
@@ -253,8 +256,8 @@ function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metri
   } else if (period === '1w' || period === '1m') {
     const days = period === '1w' ? 7 : 30
     for (let d = days - 1; d >= 0; d--) {
-      const dt = new Date(today); dt.setDate(today.getDate() - d)
-      push(ymd(dt), String(dt.getDate()))
+      const dt = new Date(today); dt.setUTCDate(today.getUTCDate() - d)
+      push(ymd(dt), String(dt.getUTCDate()))
     }
     for (const o of completed) {
       const i = idx.get(o.createdAt.slice(0, 10))
@@ -262,14 +265,14 @@ function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metri
     }
   } else {
     let start: Date
-    if (period === '1y') start = new Date(today.getFullYear(), today.getMonth() - 11, 1)
+    if (period === '1y') start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 11, 1))
     else {
       const first = completed.map(o => o.createdAt.slice(0, 7)).sort()[0] || ymd(today).slice(0, 7)
-      start = new Date(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1)
+      start = new Date(Date.UTC(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1))
     }
-    for (const cur = new Date(start); cur <= today; cur.setMonth(cur.getMonth() + 1)) {
-      const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`
-      push(key, cur.toLocaleDateString('es-ES', { month: 'short' }))
+    for (const cur = new Date(start); cur <= today; cur.setUTCMonth(cur.getUTCMonth() + 1)) {
+      const key = `${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, '0')}`
+      push(key, cur.toLocaleDateString('es-ES', { month: 'short', timeZone: 'UTC' }))
     }
     for (const o of completed) {
       const i = idx.get(o.createdAt.slice(0, 7))
