@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Plus, Trash2, Package, Receipt, TrendingUp, TrendingDown, Wallet, PiggyBank,
   ClipboardList, FileBarChart, Download, Euro, Percent, ShoppingBag, Coins, LineChart, Layers,
-  Boxes, Target, ChevronRight, ChevronLeft, ChevronDown, ArrowLeft, CheckCircle2, Pencil, X, Check,
+  Boxes, Target, ChevronRight, ChevronDown, ArrowLeft, CheckCircle2, Pencil, X, Check,
 } from 'lucide-react'
 import HistorialTab from './HistorialTab'
 import { EvolutionChart, HBars, StockLine, Sparkline } from './Charts'
@@ -12,7 +12,7 @@ import { lotTotal, lotUnitCost, weightedUnitCost } from '@/lib/costing'
 import { computeProductStats } from '@/lib/inventory'
 import { effectivePrice } from '@/lib/price'
 import {
-  unitCostMap, computeKpis, byProduct, byCategory, byClient, monthlySeries, dailySeries,
+  unitCostMap, computeKpis, byProduct, byCategory, byClient, monthlySeries,
   presetRange, pctChange,
   BillingOrder, BillingPurchase, BillingExpense, BillingProduct, Preset,
 } from '@/lib/billing'
@@ -206,65 +206,99 @@ function hasSales(data: BillingData, from: string, to: string): boolean {
 }
 
 // ---------- RESUMEN ----------
-type Franja = 'day' | 'week' | 'month'
-const FRANJAS: { key: Franja; label: string }[] = [
-  { key: 'day', label: 'Diario' }, { key: 'week', label: 'Semanal' }, { key: 'month', label: 'Mes' },
-]
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
 
-// Rango de la franja anclado al mes mostrado. Si el mes mostrado es el actual, el
-// ancla es hoy; si es un mes pasado/futuro, el ancla es su último día.
-function franjaRange(franja: Franja, refMonth: Date, now: Date): { from: string; to: string } {
-  const monthStart = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1)
-  const monthEnd = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0)
-  const isCurrent = now.getFullYear() === refMonth.getFullYear() && now.getMonth() === refMonth.getMonth()
-  const anchor = isCurrent ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : monthEnd
-  if (franja === 'month') return { from: ymd(monthStart), to: ymd(monthEnd) }
-  if (franja === 'day') return { from: ymd(anchor), to: ymd(anchor) }
-  // week: 7 días terminando en el ancla, sin salir del mes
-  const weekStart = new Date(anchor); weekStart.setDate(anchor.getDate() - 6)
-  return { from: ymd(weekStart < monthStart ? monthStart : weekStart), to: ymd(anchor) }
+type Period = '1d' | '1w' | '1m' | '1y' | 'max'
+const PERIODS: { key: Period; label: string }[] = [
+  { key: '1d', label: '1D' }, { key: '1w', label: '1S' }, { key: '1m', label: '1M' },
+  { key: '1y', label: '1A' }, { key: 'max', label: 'Máx' },
+]
+
+// Valor (ingreso o beneficio) de una línea de pedido completado.
+function itemValue(it: { productId: number | null; price: number; quantity: number }, costMap: Map<number, number>, metric: 'profit' | 'revenue'): number {
+  const rev = it.price * it.quantity
+  if (metric === 'revenue') return rev
+  const uc = it.productId != null ? (costMap.get(it.productId) ?? 0) : 0
+  return rev - uc * it.quantity
+}
+
+// Rango de fechas del periodo (para los KPIs), anclado a hoy.
+function periodRange(period: Period, now: Date, firstDate: string): { from: string; to: string } {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const to = ymd(today)
+  if (period === 'max') return { from: firstDate || '2000-01-01', to }
+  const from = new Date(today)
+  if (period === '1w') from.setDate(today.getDate() - 6)
+  else if (period === '1m') from.setDate(today.getDate() - 29)
+  else if (period === '1y') from.setFullYear(today.getFullYear() - 1)
+  return { from: ymd(from), to }
+}
+
+// Serie acumulada "estilo bolsa" del periodo: buckets por hora (1D), día (1S/1M) o mes (1A/Máx).
+function stockSeries(orders: BillingOrder[], costMap: Map<number, number>, metric: 'profit' | 'revenue', period: Period, now: Date): { label: string; value: number }[] {
+  const completed = orders.filter(o => o.status === 'completed')
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const buckets: { key: string; label: string; value: number }[] = []
+  const idx = new Map<string, number>()
+  const push = (key: string, label: string) => { idx.set(key, buckets.length); buckets.push({ key, label, value: 0 }) }
+
+  if (period === '1d') {
+    for (let h = 0; h < 24; h++) push(String(h), `${h}:00`)
+    const td = ymd(today)
+    for (const o of completed) {
+      if (o.createdAt.slice(0, 10) !== td) continue
+      const i = idx.get(String(new Date(o.createdAt).getHours()))
+      if (i != null) for (const it of o.items) buckets[i].value += itemValue(it, costMap, metric)
+    }
+  } else if (period === '1w' || period === '1m') {
+    const days = period === '1w' ? 7 : 30
+    for (let d = days - 1; d >= 0; d--) {
+      const dt = new Date(today); dt.setDate(today.getDate() - d)
+      push(ymd(dt), String(dt.getDate()))
+    }
+    for (const o of completed) {
+      const i = idx.get(o.createdAt.slice(0, 10))
+      if (i != null) for (const it of o.items) buckets[i].value += itemValue(it, costMap, metric)
+    }
+  } else {
+    let start: Date
+    if (period === '1y') start = new Date(today.getFullYear(), today.getMonth() - 11, 1)
+    else {
+      const first = completed.map(o => o.createdAt.slice(0, 7)).sort()[0] || ymd(today).slice(0, 7)
+      start = new Date(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1)
+    }
+    for (const cur = new Date(start); cur <= today; cur.setMonth(cur.getMonth() + 1)) {
+      const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`
+      push(key, cur.toLocaleDateString('es-ES', { month: 'short' }))
+    }
+    for (const o of completed) {
+      const i = idx.get(o.createdAt.slice(0, 7))
+      if (i != null) for (const it of o.items) buckets[i].value += itemValue(it, costMap, metric)
+    }
+  }
+  let acc = 0
+  return buckets.map(b => { acc += b.value; return { label: b.label, value: acc } })
 }
 
 function Resumen({ data, costMap }: { data: BillingData; costMap: Map<number, number> }) {
   const now = useMemo(() => new Date(), [])
-  const [refMonth, setRefMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
-  const [franja, setFranja] = useState<Franja>('month')
-
+  const [period, setPeriod] = useState<Period>('1m')
   const [metric, setMetric] = useState<'profit' | 'revenue'>('profit')
-  const monthStart = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1)
-  const monthEnd = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0)
-  const isCurrent = now.getFullYear() === refMonth.getFullYear() && now.getMonth() === refMonth.getMonth()
-  const daily = useMemo(() => dailySeries(data.orders, costMap, ymd(monthStart), ymd(monthEnd)),
-    [data.orders, costMap, refMonth]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Serie acumulada estilo "bolsa": recorta el mes en curso hasta hoy y acumula la métrica elegida.
-  const cumulative = useMemo(() => {
-    const todayYmd = ymd(now)
-    const shown = isCurrent ? daily.filter(d => d.date <= todayYmd) : daily
-    let acc = 0
-    return shown.map(d => { acc += metric === 'profit' ? d.profit : d.revenue; return { date: d.date, value: acc } })
-  }, [daily, metric, isCurrent, now]) // eslint-disable-line react-hooks/exhaustive-deps
-  const fr = franjaRange(franja, refMonth, now)
-  const k = computeKpis(data.orders, costMap, data.expenses, fr.from, fr.to)
-  const monthLabel = refMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-  const navMonth = (delta: number) => setRefMonth(m => new Date(m.getFullYear(), m.getMonth() + delta, 1))
-  const lastCum = cumulative.length ? cumulative[cumulative.length - 1].value : 0
+
+  const series = useMemo(() => stockSeries(data.orders, costMap, metric, period, now),
+    [data.orders, costMap, metric, period, now])
+  const firstDate = useMemo(() => data.orders.filter(o => o.status === 'completed').map(o => o.createdAt.slice(0, 10)).sort()[0] || ymd(now),
+    [data.orders, now]) // eslint-disable-line react-hooks/exhaustive-deps
+  const range = periodRange(period, now, firstDate)
+  const k = computeKpis(data.orders, costMap, data.expenses, range.from, range.to)
+  const lastCum = series.length ? series[series.length - 1].value : 0
 
   return (
     <div className="space-y-5">
-      {/* Curva acumulada del mes (estilo bolsa) con navegación < > */}
-      <Section title={metric === 'profit' ? 'Beneficio acumulado del mes' : 'Ingresos acumulados del mes'} subtitle={`Evolución día a día · ${monthLabel}`}>
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <button onClick={() => navMonth(-1)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Mes anterior">
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-sm font-semibold capitalize" style={{ color: 'var(--accent2)' }}>{monthLabel}</span>
-          <button onClick={() => navMonth(1)} disabled={isCurrent} className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Mes siguiente">
-            <ChevronRight size={16} />
-          </button>
-        </div>
+      {/* Curva acumulada estilo bolsa con selector 1D · 1S · 1M · 1A · Máx */}
+      <Section title={metric === 'profit' ? 'Beneficio' : 'Ingresos'} subtitle="Evolución acumulada del periodo">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <span className="text-lg font-bold tabular-nums" style={{ color: lastCum >= 0 ? '#22c55e' : '#ef4444' }}>
+          <span className="text-2xl font-bold tabular-nums" style={{ color: lastCum >= 0 ? '#22c55e' : '#ef4444' }}>
             {lastCum >= 0 ? '+' : ''}{eur(lastCum)}
           </span>
           <div className="flex p-1 rounded-xl shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
@@ -274,24 +308,17 @@ function Resumen({ data, costMap }: { data: BillingData; costMap: Map<number, nu
             ))}
           </div>
         </div>
-        <StockLine data={cumulative} fmt={(v) => eur(v)} />
-      </Section>
-
-      {/* Fila de datos + selector de franja */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          {franja === 'month' ? `Datos de ${monthLabel}` : franja === 'week' ? 'Datos de los últimos 7 días' : `Datos del ${fr.from}`}
-        </p>
-        <div className="flex p-1 rounded-xl shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-          {FRANJAS.map(f => (
-            <button key={f.key} onClick={() => setFranja(f.key)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-              style={{ background: franja === f.key ? 'var(--accent2)' : 'transparent', color: franja === f.key ? 'var(--bg)' : 'var(--muted)' }}>
-              {f.label}
+        <StockLine data={series} fmt={(v) => eur(v)} />
+        <div className="flex justify-between mt-3">
+          {PERIODS.map(p => (
+            <button key={p.key} onClick={() => setPeriod(p.key)}
+              className="px-3 py-1.5 rounded-lg text-sm font-bold cursor-pointer transition-all"
+              style={{ background: period === p.key ? 'var(--accent2)' : 'transparent', color: period === p.key ? 'var(--bg)' : 'var(--muted)' }}>
+              {p.label}
             </button>
           ))}
         </div>
-      </div>
+      </Section>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Pedidos" value={String(k.orderCount)} icon={ShoppingBag} />

@@ -113,7 +113,7 @@ export function DailyBars({ data }: { data: { date: string; revenue: number }[] 
 // Línea verde/roja según termine por encima o por debajo de 0, relleno degradado,
 // base punteada en 0 y etiquetas de valor a la derecha + días abajo.
 export function StockLine({ data, fmt = (v: number) => v.toFixed(0), height = 210 }: {
-  data: { date: string; value: number }[]
+  data: { label: string; value: number }[]
   fmt?: (v: number) => string
   height?: number
 }) {
@@ -166,12 +166,16 @@ export function StockLine({ data, fmt = (v: number) => v.toFixed(0), height = 21
       <path d={area} fill={`url(#${gid})`} />
       <path d={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       <circle cx={pts[n - 1][0]} cy={pts[n - 1][1]} r={3.5} fill={color} />
-      {/* días abajo */}
-      {data.map((d, i) => {
-        const day = Number(d.date.slice(8, 10))
-        if (!(day === 1 || day % 5 === 0)) return null
-        return <text key={d.date} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--muted)">{day}</text>
-      })}
+      {/* etiquetas del eje X: ~6 repartidas */}
+      {(() => {
+        const ticks = Math.min(6, n)
+        const seen = new Set<number>()
+        return Array.from({ length: ticks }, (_, t) => (ticks <= 1 ? 0 : Math.round((t * (n - 1)) / (ticks - 1))))
+          .filter(i => !seen.has(i) && (seen.add(i), true))
+          .map(i => (
+            <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize="11" fill="var(--muted)">{data[i].label}</text>
+          ))
+      })()}
     </svg>
   )
 }
