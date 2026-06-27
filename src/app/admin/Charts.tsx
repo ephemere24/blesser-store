@@ -109,6 +109,73 @@ export function DailyBars({ data }: { data: { date: string; revenue: number }[] 
   )
 }
 
+// Curva suave estilo "gráfica de bolsa": evolución acumulada en el mes.
+// Línea verde/roja según termine por encima o por debajo de 0, relleno degradado,
+// base punteada en 0 y etiquetas de valor a la derecha + días abajo.
+export function StockLine({ data, fmt = (v: number) => v.toFixed(0), height = 210 }: {
+  data: { date: string; value: number }[]
+  fmt?: (v: number) => string
+  height?: number
+}) {
+  if (data.length < 2) return <ChartEmpty />
+  const W = 720, H = height
+  const padT = 16, padB = 24, padL = 6, padR = 52
+  const plotW = W - padL - padR
+  const n = data.length
+  const values = data.map(d => d.value)
+  let lo = Math.min(0, ...values), hi = Math.max(0, ...values)
+  if (lo === hi) { hi += 1; lo -= 1 }
+  const padV = (hi - lo) * 0.1
+  lo -= padV; hi += padV
+  const x = (i: number) => padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1))
+  const y = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB)
+  const pts: [number, number][] = data.map((d, i) => [x(i), y(d.value)])
+
+  // Curva suave (Catmull-Rom → Bézier)
+  let line = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6
+    line += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`
+  }
+  const baseY = H - padB
+  const area = `${line} L ${pts[n - 1][0].toFixed(1)} ${baseY} L ${pts[0][0].toFixed(1)} ${baseY} Z`
+
+  const last = values[n - 1]
+  const up = last >= 0
+  const color = up ? '#22c55e' : '#ef4444'
+  const gid = `sg-${up ? 'up' : 'dn'}`
+  const zeroY = lo < 0 && hi > 0 ? y(0) : baseY
+  const yLabels = [hi - padV, (hi + lo) / 2, lo + padV]
+
+  return (
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      {/* etiquetas de valor a la derecha */}
+      {yLabels.map((v, i) => (
+        <text key={i} x={W - padR + 8} y={y(v) + 4} fontSize="12" fill="var(--muted)">{fmt(v)}</text>
+      ))}
+      {/* base en 0 punteada */}
+      <line x1={padL} x2={W - padR} y1={zeroY} y2={zeroY} stroke="var(--muted)" strokeWidth={1} strokeDasharray="2 4" opacity={0.5} />
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={pts[n - 1][0]} cy={pts[n - 1][1]} r={3.5} fill={color} />
+      {/* días abajo */}
+      {data.map((d, i) => {
+        const day = Number(d.date.slice(8, 10))
+        if (!(day === 1 || day % 5 === 0)) return null
+        return <text key={d.date} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--muted)">{day}</text>
+      })}
+    </svg>
+  )
+}
+
 // Mini-gráfico de línea (evolución de la posición neta de un producto, "como una acción").
 export function Sparkline({ values, width = 96, height = 30 }: { values: number[]; width?: number; height?: number }) {
   if (values.length < 2) return <svg width={width} height={height} />

@@ -7,7 +7,7 @@ import {
   Boxes, Target, ChevronRight, ChevronLeft, ChevronDown, ArrowLeft, CheckCircle2, Pencil, X, Check,
 } from 'lucide-react'
 import HistorialTab from './HistorialTab'
-import { EvolutionChart, HBars, DailyBars, Sparkline } from './Charts'
+import { EvolutionChart, HBars, StockLine, Sparkline } from './Charts'
 import { lotTotal, lotUnitCost, weightedUnitCost } from '@/lib/costing'
 import { computeProductStats } from '@/lib/inventory'
 import { effectivePrice } from '@/lib/price'
@@ -231,21 +231,30 @@ function Resumen({ data, costMap }: { data: BillingData; costMap: Map<number, nu
   const [refMonth, setRefMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
   const [franja, setFranja] = useState<Franja>('month')
 
+  const [metric, setMetric] = useState<'profit' | 'revenue'>('profit')
   const monthStart = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1)
   const monthEnd = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0)
+  const isCurrent = now.getFullYear() === refMonth.getFullYear() && now.getMonth() === refMonth.getMonth()
   const daily = useMemo(() => dailySeries(data.orders, costMap, ymd(monthStart), ymd(monthEnd)),
     [data.orders, costMap, refMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Serie acumulada estilo "bolsa": recorta el mes en curso hasta hoy y acumula la métrica elegida.
+  const cumulative = useMemo(() => {
+    const todayYmd = ymd(now)
+    const shown = isCurrent ? daily.filter(d => d.date <= todayYmd) : daily
+    let acc = 0
+    return shown.map(d => { acc += metric === 'profit' ? d.profit : d.revenue; return { date: d.date, value: acc } })
+  }, [daily, metric, isCurrent, now]) // eslint-disable-line react-hooks/exhaustive-deps
   const fr = franjaRange(franja, refMonth, now)
   const k = computeKpis(data.orders, costMap, data.expenses, fr.from, fr.to)
   const monthLabel = refMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-  const isCurrent = now.getFullYear() === refMonth.getFullYear() && now.getMonth() === refMonth.getMonth()
   const navMonth = (delta: number) => setRefMonth(m => new Date(m.getFullYear(), m.getMonth() + delta, 1))
+  const lastCum = cumulative.length ? cumulative[cumulative.length - 1].value : 0
 
   return (
     <div className="space-y-5">
-      {/* Gráfico de ventas del mes con navegación < > */}
-      <Section title="Ventas del mes" subtitle={`Ingresos diarios · ${monthLabel}`}>
-        <div className="flex items-center justify-between gap-3 mb-3">
+      {/* Curva acumulada del mes (estilo bolsa) con navegación < > */}
+      <Section title={metric === 'profit' ? 'Beneficio acumulado del mes' : 'Ingresos acumulados del mes'} subtitle={`Evolución día a día · ${monthLabel}`}>
+        <div className="flex items-center justify-between gap-3 mb-2">
           <button onClick={() => navMonth(-1)} className="p-1.5 rounded-lg cursor-pointer" style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--accent)' }} aria-label="Mes anterior">
             <ChevronLeft size={16} />
           </button>
@@ -254,7 +263,18 @@ function Resumen({ data, costMap }: { data: BillingData; costMap: Map<number, nu
             <ChevronRight size={16} />
           </button>
         </div>
-        <DailyBars data={daily} />
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <span className="text-lg font-bold tabular-nums" style={{ color: lastCum >= 0 ? '#22c55e' : '#ef4444' }}>
+            {lastCum >= 0 ? '+' : ''}{eur(lastCum)}
+          </span>
+          <div className="flex p-1 rounded-xl shrink-0" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+            {([['profit', 'Beneficio'], ['revenue', 'Ingresos']] as const).map(([k2, lbl]) => (
+              <button key={k2} onClick={() => setMetric(k2)} className="px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer"
+                style={{ background: metric === k2 ? 'var(--accent2)' : 'transparent', color: metric === k2 ? 'var(--bg)' : 'var(--muted)' }}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        <StockLine data={cumulative} fmt={(v) => eur(v)} />
       </Section>
 
       {/* Fila de datos + selector de franja */}
